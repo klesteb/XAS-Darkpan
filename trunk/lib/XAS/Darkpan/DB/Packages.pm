@@ -33,10 +33,11 @@ use XAS::Class
 sub add {
     my $self = shift;
     my $p = $self->validate_params(\@_, {
-       -name    => 1,
-       -version => 1,
-       -path    => 1,
-       -mirror  => { optional => 1, default => $self->mirror }
+       -name     => 1,
+       -version  => 1,
+       -path     => 1,
+       -location => { optional => 1, default => 'remote' },
+       -mirror   => { optional => 1, default => $self->url->server }
     });
 
     my $schema = $self->schema;
@@ -44,16 +45,17 @@ sub add {
     my $info = CPAN::DistnameInfo->new($p->{path});
     my $module = {
         pauseid  => $info->cpanid,
-        module   => $p->{name},
-        version  => $p->{version},
+        module   => $p->{'name'},
+        version  => $p->{'version'},
         package  => $info->distvname,
         datetime => dt2db($dt),
+        lcation  => $p->{'location'}, 
     };
     my $package = {
         name     => $info->distvname,
         maturity => $info->maturity,
         path     => $info->pathname,
-        mirror   => $p->{mirror},
+        mirror   => $p->{'mirror'},
         datetime => dt2db($dt),
     };
 
@@ -129,7 +131,7 @@ sub load {
         $hash->{$info->distvname} = {
             maturity => $info->maturity || 'unknown',
             path     => $info->pathname,
-            mirror   => $self->mirror,
+            mirror   => $self->url->server,
             datetime => dt2db($dt),
         };
 

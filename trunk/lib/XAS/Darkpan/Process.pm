@@ -3,24 +3,24 @@ package XAS::Darkpan::Process;
 our $VERSION = '0.01';
 
 use Archive::Tar;
-use Archive::Zip;
 use CPAN::Checksums;
 use CPAN::DistnameInfo;
+use Params::Validate 'CODEREF';
 use XAS::Lib::Modules::Locking;
 use XAS::Darkpan::DB::Packages;
-use Params::Validate 'CODEREF';
+use Archive::Zip ':ERROR_CODES';
 use File::Spec::Functions qw/splitdir/;
 
 use XAS::Class
   debug      => 0,
   version    => $VERSION,
   base       => 'XAS::Darkpan::Base',
-  accesors   => 'packages',
+  accessors  => 'packages',
   filesystem => 'Dir File',
   utils      => 'dir_walk dotid',
   constant => {
     PACKAGE => qr/\.pm$/i,
-    META    => qr/^META\.json | ^META\.yml | ^META\.yaml/x1;
+    META    => qr/META\.json$ | META\.yml$ | META\.yaml$/xi,
     TAR     => qr/ \.tar\.gz$ | \.tar\.Z$ | \.tgz$/xi,
     ZIP     => qr/ \.zip$ /xi,
   },
@@ -34,6 +34,8 @@ use XAS::Class
 
 # badversion = "illegal version for %s, found '%s': %s"
 # noarch = "unknow archive type: %s"
+# nofiles = "no files found in archive, reason: %s"
+# unknownarc = 'unknown archive type: %s"
 
 # ----------------------------------------------------------------------
 # Public Methods
@@ -74,13 +76,15 @@ sub create {
 
 sub mirror {
     my $self = shift;
-    my ($source, $destination) = $self->validate_params(\@_, [
-       { isa => 'Badger::URL' },
-       { isa => 'Badger::Filesystem::Directory' },
-    ]);
+    my $p = $self->validate_params(\@_, {
+	   -url         => { isa => 'Badger::URL' },
+       -location    => { optional => 1, default => 'remote' },
+       -destination => { isa => 'Badger::Filesystem::Directory' },
+    });
 
-    my $data = $self->fetch($source);
-    my $file = File($destination, $source->path);
+    my $file = File($p->{'destination'}, $p->{'source'}->path);
+    my $data = $self->fetch($p->{'source'});
+    my $location = $p->{'locationa'};
     my $lock = $file->directory;
 
     $lock->create unless ($lock->exists);
@@ -95,7 +99,7 @@ sub mirror {
 
         }
 
-        $self->inspect_archive($file);
+        $self->inspect_archive($file, $location);
         $self->lockmgr->unlock_directory($lock);
 
     }
@@ -112,19 +116,21 @@ sub checksums {
 
 sub inspect_archive {
     my $self = shift;
-    my ($file) = $self->validate_params(\@_, [1]);
+    my ($file, $location) = $self->validate_params(\@_, [1,1]);
 
     if ($file =~ /TAR/) {
 
         $self->_inspect_tar_archive(
             -filename => $file, 
             -filter   => PACKAGE, 
+            -location => $location,
             -callback => \&_collect_package_details
         );
 
         $self->_inspect_tar_archive(
             -filename => $file, 
             -filter   => META, 
+            -location => $location,
             -callback => sub {}
         );
 
@@ -133,12 +139,14 @@ sub inspect_archive {
         $self->_inspect_zip_archive(
             -filename => $file, 
             -filter   => PACKAGE, 
+            -location => $location,
             -callback => \&_collect_package_details
         );
 
         $self->_inspect_zip_archive(
             -filename => $file, 
             -filter   => META, 
+            -location => $location,
             -callback => sub {}
         );
 
@@ -146,8 +154,8 @@ sub inspect_archive {
 
         $self->throw_msg(
             dotid($self->class) . '.inspect_archive.unknown',
-            'unknowwarc'
-            $file
+            'unknowwarc',
+            $file,
         );
 
     }
@@ -172,7 +180,7 @@ sub _package_at_usual_location {
 
 sub _collect_package_details {   
     my $self = shift;
-    my ($fn, $dist, $content) = $self->validate_params(\@_, [1,1,1]);
+    my ($fn, $dist, $content, $location) = $self->validate_params(\@_, [1,1,1,1]);
 
     my @lines  = split(/\r?\n/, $content);
     my $in_pod = 0;
@@ -205,7 +213,7 @@ sub _collect_package_details {
 
             # second package in file?
 
-            $self->_register($package, $VERSION, $dist) if (defined($package));
+            $self->_register($package, $VERSION, $dist, $location) if (defined($package));
 
             ($package, $VERSION) = ($thispkg, $thisversion);
 
@@ -236,21 +244,22 @@ sub _collect_package_details {
     }
 
     $VERSION = $VERSION->numify if (ref($VERSION));
-    $self->_register($package, $VERSION, $dist) if defined $package;
+    $self->_register($package, $VERSION, $dist, $location) if defined $package;
 
 }
 
 sub _register {
     my $self = shift;
-    my ($package, $verson, $dist) = $self->validate_params(\@_, [1,1,1]);
+    my ($package, $version, $dist, $location) = $self->validate_params(\@_, [1,1,1,1]);
 
     my $auth_id = $self->cfg->author_id;
-    my ($path) = $dist->path =~ /$atuth_id(.*)/;
+    my ($path) = $dist->path =~ /$auth_id(.*)/;
 
     $self->packages->add(
-        -name    => $package,
-        -version => $version,
-        -path    => $path
+        -name     => $package,
+        -version  => $version,
+        -path     => $path,
+        -location => $location,
     );
 
 }
@@ -259,6 +268,7 @@ sub _inspect_tar_archive {
     my $self = shift;
     my $p = $self->validate_params(\@_, {
         -filename => { isa => 'Badger::Filesystem::File' },
+        -location => { optional => 1, default => 'remote' },
         -filter => { callbacks => {
             'must be a compiled regex' => sub {
                     return shift->ref('RegExp');
@@ -272,6 +282,7 @@ sub _inspect_tar_archive {
     my $dist = $p->{'filename'};
     my $filter = $p->{'filter'};
     my $callback = $p->{'callback'};
+    my $location = $p->{'location'};
 
     if ($arc = Archive::Tar->new($dist->path, 1)) {
 
@@ -280,10 +291,10 @@ sub _inspect_tar_archive {
             my $path = $file->full_path;
 
             next unless ($file->is_file && 
-                         path =~ /$filter/ && 
+                         $path =~ /$filter/ && 
                          $self->_package_at_usual_location($file));
 
-            $callback->($self, $path, $dist, $file->get_content_by_ref);
+            $callback->($self, $path, $dist, $file->get_content_by_ref, $location);
 
         }
 
@@ -303,6 +314,7 @@ sub _inspect_zip_archive {
     my $self = shift;
     my $p = $self->validate_params(\@_, {
         -filename => { isa => 'Badger::Filesystem::File' },
+        -location => { optional => 1, default => 'remote' },
         -filter => { callbacks => {
             'must be a compiled regex' => sub {
                     return shift->ref('RegExp');
@@ -316,6 +328,7 @@ sub _inspect_zip_archive {
     my $dist = $p->{'filename'};
     my $filter = $p->{'filter'};
     my $callback = $p->{'callback'};
+    my $location = $p->{'location'};
 
     if ($arc = Archive::Zip->new($dist->path)) {
 
@@ -326,7 +339,7 @@ sub _inspect_zip_archive {
             next unless ($member->isTextFile && 
                          $self->_package_at_usual_location($file));
 
-            my ($content, $stat) = $member->contents;
+            my ($contents, $stat) = $member->contents;
             unless ($stat == AZ_OK) {
 
                 $self->throw_msg(
@@ -337,7 +350,7 @@ sub _inspect_zip_archive {
 
             }
 
-            $callback->($self, $file, $dist, \$contents);
+            $callback->($self, $file, $dist, \$contents, $location);
 
         }
 
