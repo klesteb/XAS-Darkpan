@@ -116,13 +116,13 @@ sub inspect_archive {
 
     if ($file =~ /TAR/) {
 
-        $self->inspect_tar_archive(
+        $self->_inspect_tar_archive(
             -filename => $file, 
             -filter   => PACKAGE, 
-            -callback => sub {}
+            -callback => \&_collect_package_details
         );
 
-        $self->inspect_tar_archive(
+        $self->_inspect_tar_archive(
             -filename => $file, 
             -filter   => META, 
             -callback => sub {}
@@ -130,13 +130,13 @@ sub inspect_archive {
 
     } elsif ($file =~ /ZIP/) {
 
-        $self->inspect_zip_archive(
+        $self->_inspect_zip_archive(
             -filename => $file, 
             -filter   => PACKAGE, 
-            -callback => sub {}
+            -callback => \&_collect_package_details
         );
 
-        $self->inspect_zip_archive(
+        $self->_inspect_zip_archive(
             -filename => $file, 
             -filter   => META, 
             -callback => sub {}
@@ -148,104 +148,6 @@ sub inspect_archive {
             dotid($self->class) . '.inspect_archive.unknown',
             'unknowwarc'
             $file
-        );
-
-    }
-
-}
-
-sub inspect_tar_archive {
-    my $self = shift;
-    my $p = $self->validate_params(\@_, {
-        -filename => { isa => 'Badger::Filesystem::File' },
-        -filter => { callbacks => {
-            'must be a compiled regex' => sub {
-                    return shift->ref('RegExp');
-                }
-            }
-        },
-        -callback => { isa => CODEREF }
-    });
-
-    my $arc;
-    my $dist = $p->{'filename'};
-    my $filter = $p->{'filter'};
-    my $callback = $p->{'callback'};
-
-    if ($arc = Archive::Tar->new($dist->path, 1)) {
-
-        foreach my $file ($arc->get_files) {
-
-            my $path = $file->full_path;
-
-            next unless ($file->is_file && 
-                         path =~ /$filter/ && 
-                         $self->_package_at_usual_location($file));
-
-            $callback->($self, $path, $dist, $file->get_content_by_ref);
-
-        }
-
-    } else {
-
-        $self->throw_msg(
-            dotid($self->class) . '.inspect_tar_archive.nofiles',
-            'nofiles',
-            $arc->error
-        );
-
-    }
-
-}
-
-sub inspect_zip_archive {
-    my $self = shift;
-    my $p = $self->validate_params(\@_, {
-        -filename => { isa => 'Badger::Filesystem::File' },
-        -filter => { callbacks => {
-            'must be a compiled regex' => sub {
-                    return shift->ref('RegExp');
-                }
-            }
-        },
-        -callback => { isa => CODEREF }
-    });
-
-    my $arc;
-    my $dist = $p->{'filename'};
-    my $filter = $p->{'filter'};
-    my $callback = $p->{'callback'};
-
-    if ($arc = Archive::Zip->new($dist->path)) {
-
-        foreach my $member ($arc->membersMatching($filter)) {
-
-            my $file = $member->filename;
-
-            next unless ($member->isTextFile && 
-                         $self->_package_at_usual_location($file));
-
-            my ($content, $stat) = $member->contents;
-            unless ($stat == AZ_OK) {
-
-                $self->throw_msg(
-                    dotid($self->class) . '.inspect_zip_archive.badzip',
-                    'badzip',
-                    $arc->error
-                );
-
-            }
-
-            $callback->($self, $file, $dist, \$contents);
-
-        }
-
-    } else {
-
-        $self->throw_msg(
-            dotid($self->class) . '.inspect_zip_archive.nofiles',
-            'nofiles',
-            $arc->error
         );
 
     }
@@ -350,6 +252,104 @@ sub _register {
         -version => $version,
         -path    => $path
     );
+
+}
+
+sub _inspect_tar_archive {
+    my $self = shift;
+    my $p = $self->validate_params(\@_, {
+        -filename => { isa => 'Badger::Filesystem::File' },
+        -filter => { callbacks => {
+            'must be a compiled regex' => sub {
+                    return shift->ref('RegExp');
+                }
+            }
+        },
+        -callback => { isa => CODEREF }
+    });
+
+    my $arc;
+    my $dist = $p->{'filename'};
+    my $filter = $p->{'filter'};
+    my $callback = $p->{'callback'};
+
+    if ($arc = Archive::Tar->new($dist->path, 1)) {
+
+        foreach my $file ($arc->get_files) {
+
+            my $path = $file->full_path;
+
+            next unless ($file->is_file && 
+                         path =~ /$filter/ && 
+                         $self->_package_at_usual_location($file));
+
+            $callback->($self, $path, $dist, $file->get_content_by_ref);
+
+        }
+
+    } else {
+
+        $self->throw_msg(
+            dotid($self->class) . '.inspect_tar_archive.nofiles',
+            'nofiles',
+            $arc->error
+        );
+
+    }
+
+}
+
+sub _inspect_zip_archive {
+    my $self = shift;
+    my $p = $self->validate_params(\@_, {
+        -filename => { isa => 'Badger::Filesystem::File' },
+        -filter => { callbacks => {
+            'must be a compiled regex' => sub {
+                    return shift->ref('RegExp');
+                }
+            }
+        },
+        -callback => { isa => CODEREF }
+    });
+
+    my $arc;
+    my $dist = $p->{'filename'};
+    my $filter = $p->{'filter'};
+    my $callback = $p->{'callback'};
+
+    if ($arc = Archive::Zip->new($dist->path)) {
+
+        foreach my $member ($arc->membersMatching($filter)) {
+
+            my $file = $member->filename;
+
+            next unless ($member->isTextFile && 
+                         $self->_package_at_usual_location($file));
+
+            my ($content, $stat) = $member->contents;
+            unless ($stat == AZ_OK) {
+
+                $self->throw_msg(
+                    dotid($self->class) . '.inspect_zip_archive.badzip',
+                    'badzip',
+                    $arc->error
+                );
+
+            }
+
+            $callback->($self, $file, $dist, \$contents);
+
+        }
+
+    } else {
+
+        $self->throw_msg(
+            dotid($self->class) . '.inspect_zip_archive.nofiles',
+            'nofiles',
+            $arc->error
+        );
+
+    }
 
 }
 
