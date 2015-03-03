@@ -26,6 +26,8 @@ use XAS::Class
   }
 ;
 
+use Data::Dumper;
+
 # ----------------------------------------------------------------------
 # Public Methods
 # ----------------------------------------------------------------------
@@ -44,12 +46,12 @@ sub add {
     my $dt = DateTime->now(time_zone => 'local');
     my $info = CPAN::DistnameInfo->new($p->{path});
     my $module = {
-        pauseid  => $info->cpanid,
-        module   => $p->{'name'},
-        version  => $p->{'version'},
-        package  => $info->distvname,
-        datetime => dt2db($dt),
-        lcation  => $p->{'location'}, 
+        pauseid   => $info->cpanid,
+        module    => $p->{'name'},
+        version   => $p->{'version'} || 'undef',
+        package   => $info->distvname,
+        datetime  => dt2db($dt),
+        location  => $p->{'location'}, 
     };
     my $package = {
         name     => $info->distvname,
@@ -59,6 +61,9 @@ sub add {
         datetime => dt2db($dt),
     };
 
+warn Dumper($module);
+warn Dumper($package);
+      
     $schema->txn_do(sub {
 
         Modules->create_record($schema, $module);

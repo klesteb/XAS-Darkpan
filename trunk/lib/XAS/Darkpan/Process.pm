@@ -15,27 +15,27 @@ use XAS::Class
   debug      => 0,
   version    => $VERSION,
   base       => 'XAS::Darkpan::Base',
-  accessors  => 'packages',
+  accessors  => 'packages lockmgr',
   filesystem => 'Dir File',
   utils      => 'dir_walk dotid',
   constant => {
-    PACKAGE => qr/\.pm$/i,
-    META    => qr/META\.json$ | META\.yml$ | META\.yaml$/xi,
-    TAR     => qr/ \.tar\.gz$ | \.tar\.Z$ | \.tgz$/xi,
-    ZIP     => qr/ \.zip$ /xi,
+    PACKAGE => qr/\.pm$/,
+    META    => qr/META\.json$|META\.yml$|META\.yaml$/,
+    TAR     => qr/\.tar\.gz$|\.tar\.Z$|\.tgz$/,
+    ZIP     => qr/\.zip$/,
   },
   vars => {
     PARAMS => {
-      -schema => 1,
-      -cfg    => 1,
+      -schema     => 1,
+      -authors    => { optional => 1, default => '/authors' },
+      -modules    => { optional => 1, default => '/modules' },
+      -root       => { optional => 1, default => '/srv/dpan' },
+      -authors_id => { optional => 1, default => '/authors/id' },
     }
   }
 ;
 
-# badversion = "illegal version for %s, found '%s': %s"
-# noarch = "unknow archive type: %s"
-# nofiles = "no files found in archive, reason: %s"
-# unknownarc = 'unknown archive type: %s"
+use Data::Dumper;
 
 # ----------------------------------------------------------------------
 # Public Methods
@@ -44,33 +44,38 @@ use XAS::Class
 sub create {
     my $self = shift;
     my $p = $self->validate_params(\@_, {
-        -authors => { optional => 1, isa => 'Badger::Filesystem::Directory', default => $self->cfg->authors },
-        -modules => { optional => 1, isa => 'Badger::Filesystem::Directory', default => $self->cfg->modules },
-        -root    => { optional => 1, isa => 'Badger::Filesystem::Directory', default => $self->cfg->root }
-        -auth_id => { optional => 1, isa => 'Badger::Filesystem::Directory', default => $self->cfg->auth_id },
+        -authors => { optional => 1, default => $self->authors },
+        -modules => { optional => 1, default => $self->modules },
+        -root    => { optional => 1, default => $self->root },
+        -auth_id => { optional => 1, default => $self->authors_id },
     });
 
     my $d;
     my @dirs = qw(A B C D E F G H I J K L M N O P Q R S T U V W X Y Z);
 
-    $d = Dir($p->{root});
+    $d = Dir($p->{'root'});
     $d->create unless ($d->exists);
 
-    $d = Dir($p->{root}, $p->{authors});
+    $d = Dir($p->{'root'}, $p->{'authors'});
     $d->create unless ($d->exists);
 
-    $d = Dir($p->{root}, $p->{modules});
+    $d = Dir($p->{'root'}, $p->{'modules'});
     $d->create unless ($d->exists);
 
-    $d = Dir($p->{root}, $p->{auth_id});
+    $d = Dir($p->{'root'}, $p->{'auth_id'});
     $d->create unless ($d->exists);
 
     foreach my $dir (@dirs) {
 
-        $d = Dir($p->{root}, $p->{auth_id}, $dir);
+        $d = Dir($p->{'root'}, $p->{'auth_id'}, $dir);
         $d->create unless ($d->exists);
 
     }
+
+    $self->{'root'}       = $p->{'root'};
+    $self->{'authors'}    = $p->{'authors'};
+    $self->{'modules'}    = $p->{'modules'};
+    $self->{'authors_id'} = $p->{'auth_id'};
 
 }
 
@@ -82,8 +87,10 @@ sub mirror {
        -destination => { isa => 'Badger::Filesystem::Directory' },
     });
 
-    my $file = File($p->{'destination'}, $p->{'source'}->path);
-    my $data = $self->fetch($p->{'source'});
+    my $auth_id = $self->authors_id;
+    my ($path) = $p->{'url'}->path =~ /$auth_id(.*)/;
+    my $file = File($p->{'destination'}, $path);
+    my $data = $self->fetch($p->{'url'});
     my $location = $p->{'locationa'};
     my $lock = $file->directory;
 
@@ -100,6 +107,10 @@ sub mirror {
         }
 
         $self->inspect_archive($file, $location);
+
+        $CPAN::Checksums::IGNORE_MATCH = 'locked.lck';
+        CPAN::Checksums::updatedir($file->directory);
+
         $self->lockmgr->unlock_directory($lock);
 
     }
@@ -118,7 +129,7 @@ sub inspect_archive {
     my $self = shift;
     my ($file, $location) = $self->validate_params(\@_, [1,1]);
 
-    if ($file =~ /TAR/) {
+    if ($file->path =~ m/TAR/i) {
 
         $self->_inspect_tar_archive(
             -filename => $file, 
@@ -134,7 +145,7 @@ sub inspect_archive {
             -callback => sub {}
         );
 
-    } elsif ($file =~ /ZIP/) {
+    } elsif ($file->path =~ m/ZIP/i) {
 
         $self->_inspect_zip_archive(
             -filename => $file, 
@@ -153,8 +164,8 @@ sub inspect_archive {
     } else {
 
         $self->throw_msg(
-            dotid($self->class) . '.inspect_archive.unknown',
-            'unknowwarc',
+            dotid($self->class) . '.inspect_archive.unknownarc',
+            'unknownarc',
             $file,
         );
 
@@ -170,7 +181,7 @@ sub _package_at_usual_location {
     my $self = shift;
     my ($file) = $self->validate_params(\@_, [1]);
 
-    my ($top, $subdir, @rest) = splitdir($file->path);
+    my ($top, $subdir, @rest) = splitdir($file);
     defined $subdir or return 0;
 
     ! @rest               # path is at top-level of distro
@@ -182,10 +193,10 @@ sub _collect_package_details {
     my $self = shift;
     my ($fn, $dist, $content, $location) = $self->validate_params(\@_, [1,1,1,1]);
 
-    my @lines  = split(/\r?\n/, $content);
+    my @lines  = split(/\r?\n/, $$content);
     my $in_pod = 0;
     my $package;
-
+    
     local $VERSION = undef;  # may get destroyed by eval
 
     while (@lines) {
@@ -199,7 +210,7 @@ sub _collect_package_details {
         $_ .= shift @lines while m/package|use|VERSION/ && !m/\;/;
 
         if ( m/^\s* package \s* ((?:\w+\:\:)*\w+) (?:\s+ (\S*))? \s* ;/x ) {
-
+              
             my ($thispkg, $v) = ($1, $2);
             my $thisversion;
 
@@ -223,7 +234,7 @@ sub _collect_package_details {
 
         if ( m/^ (?:use\s+version\s*;\s*)?
             (?:our)? \s* \$ ((?: \w+\:\:)*) VERSION \s* \= (.*)/x ) {
-
+            
             defined $2 or next;
             my ($ns, $vers) = ($1, $2);
 
@@ -252,13 +263,15 @@ sub _register {
     my $self = shift;
     my ($package, $version, $dist, $location) = $self->validate_params(\@_, [1,1,1,1]);
 
-    my $auth_id = $self->cfg->author_id;
-    my ($path) = $dist->path =~ /$auth_id(.*)/;
+    my $auth_id = $self->authors_id;
+    my ($dist) = $dist =~ /$auth_id\/(.*)/;
+
+warn sprintf("package %s, version: %s, dist, %s\n", $package, $version, $dist);
 
     $self->packages->add(
         -name     => $package,
         -version  => $version,
-        -path     => $path,
+        -path     => $dist,
         -location => $location,
     );
 
@@ -271,11 +284,11 @@ sub _inspect_tar_archive {
         -location => { optional => 1, default => 'remote' },
         -filter => { callbacks => {
             'must be a compiled regex' => sub {
-                    return shift->ref('RegExp');
+                    return ref(shift) eq 'Regexp';
                 }
             }
         },
-        -callback => { isa => CODEREF }
+        -callback => { type => CODEREF }
     });
 
     my $arc;
@@ -289,10 +302,10 @@ sub _inspect_tar_archive {
         foreach my $file ($arc->get_files) {
 
             my $path = $file->full_path;
-
+              
             next unless ($file->is_file && 
-                         $path =~ /$filter/ && 
-                         $self->_package_at_usual_location($file));
+                         $path =~ m/$filter/i && 
+                         $self->_package_at_usual_location($path));
 
             $callback->($self, $path, $dist, $file->get_content_by_ref, $location);
 
@@ -317,11 +330,11 @@ sub _inspect_zip_archive {
         -location => { optional => 1, default => 'remote' },
         -filter => { callbacks => {
             'must be a compiled regex' => sub {
-                    return shift->ref('RegExp');
+                    return ref(shift) eq 'Regexp';
                 }
             }
         },
-        -callback => { isa => CODEREF }
+        -callback => { type => CODEREF }
     });
 
     my $arc;
@@ -371,9 +384,10 @@ sub init {
 
     my $self = $class->SUPER::init(@_);
 
-    $self->{packages} = XAS::Darkpan::DB::Package->new(
+    $self->{packages} = XAS::Darkpan::DB::Packages->new(
         -schema => $self->schema
     );
+    $self->{lockmgr} = XAS::Lib::Modules::Locking->new();
 
     return $self;
 
