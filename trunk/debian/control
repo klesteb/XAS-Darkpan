@@ -1,0 +1,16 @@
+Source: libxas-darkpan-perl
+Section: perl
+Priority: optional
+Build-Depends: debhelper (>= 7), perl
+Maintainer: kevin l. esteb <kevin@kesteb.us>
+Standards-Version: 3.9.4
+Homepage: http://scm.kesteb.us/trac
+
+Package: libxas-darkpan-perl
+Architecture: all
+Depends: ${misc:Depends}, ${perl:Depends}
+Description: Middelware for Perl
+ .
+ XAS Darkpan is a set of module and procedures to manage a local CPAN
+ reopository. This is usefull for operaions when tring to maintain 
+ perl based applications.

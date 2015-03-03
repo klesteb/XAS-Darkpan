@@ -1,0 +1,19 @@
+#
+# File: darkpan.ini
+# Date: 27-Feb-2015
+# By  : Kevin L. Esteb
+#
+# This is a configuration file for darkpan.
+#
+
+[remote]
+mirror = http://www.cpan.org
+authors_path = /authors/id/
+authors = /authors/01mailrc.txt.gz
+packages = /modules/02packages.txt.gz
+modlist = /modules/03modlist.txt.gz
+
+[local]
+path = /srv/dpan
+authors_path /authors/id/
+

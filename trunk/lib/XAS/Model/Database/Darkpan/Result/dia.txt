@@ -1,0 +1,23 @@
+
+[authors]
+    id
+    pauseid ---+
+    name       |
+    email      |
+               |
+[modules]      |
+    id         |
+    pauseid ---+ 
+    module      
+    version     
+    package --+     
+              | 
+[packages]    | 
+    id        | 
+    name   ---+ 
+    path        
+    mirror ---+ 
+              |
+[mirrors]     |  
+    mirror ---+    
+
