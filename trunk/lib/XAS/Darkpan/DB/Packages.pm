@@ -42,6 +42,7 @@ sub add {
        -mirror   => { optional => 1, default => $self->url->server }
     });
 
+    my $criteria;
     my $schema = $self->schema;
     my $dt = DateTime->now(time_zone => 'local');
     my $info = CPAN::DistnameInfo->new($p->{path});
@@ -61,15 +62,52 @@ sub add {
         datetime => dt2db($dt),
     };
 
-warn Dumper($module);
-warn Dumper($package);
-      
     $schema->txn_do(sub {
 
-        Modules->create_record($schema, $module);
-        Packages->create_record($schema, $package);
+        Modules->create($schema, $module);
+
+        eval { Pacakges->create($schema, $package); }
+
+        # $criteria = {
+        #     pauseid  => $module->{'pauseid'},
+        #     module   => $module->{'module'},
+        #     version  => $module->{'version'},
+        #     package  => $module->{'package'},
+        #     location => $module->{'location'},
+        # };
+
+        # unless (Modules->find($schema, $criteria)) {
+
+        #     Modules->create($schema, $module);
+
+        # }
+
+        # $criteria = {};
+        # $criteria = {
+        #     name   => $package->{'name'},
+        #     mirror => $package->{'mirror'},
+        # };
+
+        # unless (Packages->find($schema, $criteria)) {
+            
+        #     Packages->create($schema, $package);
+            
+        # }
 
     });
+
+}
+
+sub search {
+    my $self = shift;
+    my ($criteria, $options) = $self->validate_params(\@_, [
+        { optional => 1, default => {} },
+        { optional => 1, default => {} },
+    ]);
+
+    my $schema = $self->schema;
+
+    return Packages->search($schema, $criteria, $options);
 
 }
 

@@ -53,6 +53,7 @@ __PACKAGE__->add_columns(
 );
 
 __PACKAGE__->set_primary_key('id');
+__PACKAGE__->add_unique_constraint(modules_unique_idx => ['module','version','pauseid','package','location']);
 
 __PACKAGE__->optimistic_locking_strategy('version');
 __PACKAGE__->optimistic_locking_version_column('revision');

@@ -90,6 +90,19 @@ sub data {
 
 }
 
+sub search {
+    my $self = shift;
+    my ($criteria, $options) = $self->validate_params(\@_, [
+        { optional => 1, default => {} },
+        { optional => 1, default => {} },
+    ]);
+
+    my $schema = $self->schema;
+
+    return Mirrors->search($schema, $criteria, $options);
+
+}
+
 sub load {
     my $self = shift;
 

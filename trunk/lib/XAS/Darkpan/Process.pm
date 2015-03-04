@@ -7,17 +7,19 @@ use CPAN::Checksums;
 use CPAN::DistnameInfo;
 use Params::Validate 'CODEREF';
 use XAS::Lib::Modules::Locking;
+use XAS::Darkpan::DB::Authors;
+use XAS::Darkpan::DB::Mirrors;
 use XAS::Darkpan::DB::Packages;
 use Archive::Zip ':ERROR_CODES';
+use Badger::Filesystem 'Dir File';
 use File::Spec::Functions qw/splitdir/;
 
 use XAS::Class
   debug      => 0,
   version    => $VERSION,
   base       => 'XAS::Darkpan::Base',
-  accessors  => 'packages lockmgr',
-  filesystem => 'Dir File',
-  utils      => 'dir_walk dotid',
+  accessors  => 'packages authors mirrors lockmgr',
+  utils      => 'dotid left',
   constant => {
     PACKAGE => qr/\.pm$/,
     META    => qr/META\.json$|META\.yml$|META\.yaml$/,
@@ -27,10 +29,11 @@ use XAS::Class
   vars => {
     PARAMS => {
       -schema     => 1,
-      -authors    => { optional => 1, default => '/authors' },
-      -modules    => { optional => 1, default => '/modules' },
-      -root       => { optional => 1, default => '/srv/dpan' },
-      -authors_id => { optional => 1, default => '/authors/id' },
+      -authors    => { optional => 1, isa => 'Badger::Filesystem::Directory', default => Dir('/srv/dpan/authors') },
+      -modules    => { optional => 1, isa => 'Badger::Filesystem::Directory', default => Dir('/srv/dpan/modules') },
+      -root       => { optional => 1, isa => 'Badger::Filesystem::Directory', default => Dir('/srv/dpan') },
+      -authors_id => { optional => 1, isa => 'Badger::Filesystem::Directory', default => Dir('/srv/dpan/authors/id') },
+      -mirror     => { optional => 1, isa => 'Badger::URL', default => Badger::URL->new('http://www.cpan.org') },
     }
   }
 ;
@@ -44,14 +47,19 @@ use Data::Dumper;
 sub create {
     my $self = shift;
     my $p = $self->validate_params(\@_, {
-        -authors => { optional => 1, default => $self->authors },
-        -modules => { optional => 1, default => $self->modules },
-        -root    => { optional => 1, default => $self->root },
-        -auth_id => { optional => 1, default => $self->authors_id },
+        -authors => { optional => 1, isa => 'Badger::Filesystem::Directory', default => $self->authors },
+        -modules => { optional => 1, isa => 'Badger::Filesystem::Directory', default => $self->modules },
+        -root    => { optional => 1, isa => 'Badger::Filesystem::Directory', default => $self->root },
+        -auth_id => { optional => 1, isa => 'Badger::Filesystem::Directory', default => $self->authors_id },
     });
 
-    my $d;
     my @dirs = qw(A B C D E F G H I J K L M N O P Q R S T U V W X Y Z);
+
+    my $authors    = $p->{'authors'};
+    my $modules    = $p->{'modules'};
+    my $root       = $p->{'root'};
+    my $authors_id = $p->{'auth_id'};
+    
 
     $d = Dir($p->{'root'});
     $d->create unless ($d->exists);
@@ -72,44 +80,78 @@ sub create {
 
     }
 
-    $self->{'root'}       = $p->{'root'};
-    $self->{'authors'}    = $p->{'authors'};
-    $self->{'modules'}    = $p->{'modules'};
-    $self->{'authors_id'} = $p->{'auth_id'};
-
 }
 
 sub mirror {
     my $self = shift;
+    my ($destination) = $self->validate_params(\@_, [
+       { isa => 'Badger::Filesystem::Directory' },
+    ]);
+
+    my $schema  = $self->schema;
+    my $auth_id = $self->authors_id;
+    my $criteria = {
+        location => 'remote'
+    };
+
+    if (my $rs = $self->packages->search($criteria)) {
+
+        while (my $rec = $rs->next) {
+
+            my $file = File($destination, $rec->path);
+            my $lock = $file->directory;
+            my $path = sprintf("%s/%s/%s", $rec->mirror, $auth_id, $rec->path); 
+            my $url  = Badger::URL->new($path)
+
+            $lock->create unless ($lock->exists);
+
+            if ($self->lockmgr->lock_directory($lock)) {
+
+                $self->copy($url, $file);
+                $self->checksum($file->directory);
+                $self->lockmgr->unlock_directory($lock);
+
+            }
+
+        }
+
+    }
+
+}
+
+sub inject {
+    my $self = shift;
     my $p = $self->validate_params(\@_, {
-	   -url         => { isa => 'Badger::URL' },
-       -location    => { optional => 1, default => 'remote' },
+       -pauseid     => 1,
+	   -url         => { isa => 'Badger::URL', },
+       -location    => { optional => 1, default => 'local' },
        -destination => { isa => 'Badger::Filesystem::Directory' },
     });
 
-    my $auth_id = $self->authors_id;
-    my ($path) = $p->{'url'}->path =~ /$auth_id(.*)/;
-    my $file = File($p->{'destination'}, $path);
-    my $data = $self->fetch($p->{'url'});
-    my $location = $p->{'locationa'};
-    my $lock = $file->directory;
+    my $url         = $p->{'url'};
+    my $location    = $p->{'location'};
+    my $pauseid     = $p->{'pauseid'};
+    my $destination = $p->{'destination'};
 
+    my $file;
+    my $lock;
+    my @parts;
+
+    $parts[0] = $destination;
+    $parts[1] = left($pauseid, 1);
+    $parts[2] = left($pauseid, 2);
+    $parts[3] = $pauseid;
+    $parts[4] = File($url->path)->name;
+
+    $file = File(@parts);
+    $lock = $file->directory;
     $lock->create unless ($lock->exists);
 
     if ($self->lockmgr->lock_directory($lock)) {
 
-        unless ($file->exists) {
-
-            my $fh = $file->open('w');
-            $fh->write($data);
-            $fh->close;
-
-        }
-
+        $self->copy($url, $file);
         $self->inspect_archive($file, $location);
-
-        $CPAN::Checksums::IGNORE_MATCH = 'locked.lck';
-        CPAN::Checksums::updatedir($file->directory);
+        $self->checksum($file->directory);
 
         $self->lockmgr->unlock_directory($lock);
 
@@ -117,11 +159,33 @@ sub mirror {
 
 }
 
-sub checksums {
+sub copy {
     my $self = shift;
-    my ($dir) = $self->validate_params(\@_, [
-        { isa => 'Badger::Filesystem::Directory', default => Dir('/srv/dpan/authors/id') },
+    my ($url, $file) = $self->validate_params(\@_ [
+	   { isa => 'Badger::URL' },
+       { isa => 'Badger::Filesystem::File' },
     ]);
+
+    unless ($file->exists) {
+
+        my $contents = $self->fetch($url);
+        my $fh = $file->open('w');
+
+        $fh->write($contents);
+        $fh->close;
+
+    }
+
+}
+
+sub checksum {
+    my $self = shift;
+    my ($directory) = $self->validate_params(\@_, [
+        { isa => 'Badger::Filesystem::Directory' },
+    ]);
+
+    $CPAN::Checksums::IGNORE_MATCH = 'locked.lck';
+    CPAN::Checksums::updatedir($directory->path);
 
 }
 
@@ -170,6 +234,15 @@ sub inspect_archive {
         );
 
     }
+
+}
+
+sub load_database {
+    my $self = shift;
+
+    $self->authors->load();
+    $self->mirrors->load();
+    $self->pacakges->load();
 
 }
 
@@ -264,9 +337,7 @@ sub _register {
     my ($package, $version, $dist, $location) = $self->validate_params(\@_, [1,1,1,1]);
 
     my $auth_id = $self->authors_id;
-    my ($dist) = $dist =~ /$auth_id\/(.*)/;
-
-warn sprintf("package %s, version: %s, dist, %s\n", $package, $version, $dist);
+    ($dist) = $dist =~ /$auth_id\/(.*)/;
 
     $self->packages->add(
         -name     => $package,
@@ -385,8 +456,20 @@ sub init {
     my $self = $class->SUPER::init(@_);
 
     $self->{packages} = XAS::Darkpan::DB::Packages->new(
-        -schema => $self->schema
+        -schema => $self->schema,
+        -mirror => $self->mirror,
     );
+
+    $self->{authors} = XAS::Darkpan::DB::Authors->new(
+        -schema => $self->schema,
+        -mirror => $self->mirror,
+    );
+
+    $self->{mirrors} = XAS::Darkpan::DB::Mirrors->new(
+        -schema => $self->schema,
+        -mirror => $self->mirror,
+    );
+
     $self->{lockmgr} = XAS::Lib::Modules::Locking->new();
 
     return $self;
