@@ -38,8 +38,8 @@ sub add {
        -name     => 1,
        -version  => 1,
        -path     => 1,
-       -location => { optional => 1, default => 'remote' },
-       -mirror   => { optional => 1, default => $self->url->server }
+       -mirror   => { optional => 1, default => $self->url->server },
+       -location => { optional => 1, default => 'remote', regex => qr/remote|local/ },
     });
 
     my $criteria;
@@ -68,32 +68,6 @@ sub add {
 
         eval { Pacakges->create($schema, $package); }
 
-        # $criteria = {
-        #     pauseid  => $module->{'pauseid'},
-        #     module   => $module->{'module'},
-        #     version  => $module->{'version'},
-        #     package  => $module->{'package'},
-        #     location => $module->{'location'},
-        # };
-
-        # unless (Modules->find($schema, $criteria)) {
-
-        #     Modules->create($schema, $module);
-
-        # }
-
-        # $criteria = {};
-        # $criteria = {
-        #     name   => $package->{'name'},
-        #     mirror => $package->{'mirror'},
-        # };
-
-        # unless (Packages->find($schema, $criteria)) {
-            
-        #     Packages->create($schema, $package);
-            
-        # }
-
     });
 
 }
@@ -107,7 +81,7 @@ sub search {
 
     my $schema = $self->schema;
 
-    return Packages->search($schema, $criteria, $options);
+    return Modules->search($schema, $criteria, $options);
 
 }
 
@@ -214,6 +188,22 @@ sub clear {
     };
 
     Modules->delete_records($schema, $criteria);
+
+}
+
+sub count {
+    my $self = shift;
+    my ($location) = $self->validate_params(\@_, [
+        { optional => 1, default => 'remote', regex => qr/remote|local|all/ },
+    ]);
+
+    my $criteria = {
+        location => $location
+    };
+
+    $criteria = {} if ($location = 'all');
+
+    return Packages->count($criteria);
 
 }
 

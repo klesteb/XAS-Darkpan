@@ -2,6 +2,8 @@ package XAS::Darkpan::Process;
 
 our $VERSION = '0.01';
 
+use IO::Zlib;
+use DateTime;
 use Archive::Tar;
 use CPAN::Checksums;
 use CPAN::DistnameInfo;
@@ -25,15 +27,16 @@ use XAS::Class
     META    => qr/META\.json$|META\.yml$|META\.yaml$/,
     TAR     => qr/\.tar\.gz$|\.tar\.Z$|\.tgz$/,
     ZIP     => qr/\.zip$/,
+    LOCATION => qr/remote|local/,
   },
   vars => {
     PARAMS => {
-      -schema     => 1,
-      -authors    => { optional => 1, isa => 'Badger::Filesystem::Directory', default => Dir('/srv/dpan/authors') },
-      -modules    => { optional => 1, isa => 'Badger::Filesystem::Directory', default => Dir('/srv/dpan/modules') },
-      -root       => { optional => 1, isa => 'Badger::Filesystem::Directory', default => Dir('/srv/dpan') },
-      -authors_id => { optional => 1, isa => 'Badger::Filesystem::Directory', default => Dir('/srv/dpan/authors/id') },
-      -mirror     => { optional => 1, isa => 'Badger::URL', default => Badger::URL->new('http://www.cpan.org') },
+      -schema    => 1,
+      -author    => { optional => 1, isa => 'Badger::Filesystem::Directory', default => Dir('/srv/dpan/authors') },
+      -module    => { optional => 1, isa => 'Badger::Filesystem::Directory', default => Dir('/srv/dpan/modules') },
+      -root      => { optional => 1, isa => 'Badger::Filesystem::Directory', default => Dir('/srv/dpan') },
+      -author_id => { optional => 1, isa => 'Badger::Filesystem::Directory', default => Dir('/srv/dpan/authors/id') },
+      -mirror    => { optional => 1, isa => 'Badger::URL', default => Badger::URL->new('http://www.cpan.org') },
     }
   }
 ;
@@ -47,38 +50,125 @@ use Data::Dumper;
 sub create {
     my $self = shift;
     my $p = $self->validate_params(\@_, {
-        -authors => { optional => 1, isa => 'Badger::Filesystem::Directory', default => $self->authors },
-        -modules => { optional => 1, isa => 'Badger::Filesystem::Directory', default => $self->modules },
         -root    => { optional => 1, isa => 'Badger::Filesystem::Directory', default => $self->root },
+        -authors => { optional => 1, isa => 'Badger::Filesystem::Directory', default => $self->author },
+        -modules => { optional => 1, isa => 'Badger::Filesystem::Directory', default => $self->module },
         -auth_id => { optional => 1, isa => 'Badger::Filesystem::Directory', default => $self->authors_id },
     });
 
-    my @dirs = qw(A B C D E F G H I J K L M N O P Q R S T U V W X Y Z);
-
+    my $root       = $p->{'root'};
     my $authors    = $p->{'authors'};
     my $modules    = $p->{'modules'};
-    my $root       = $p->{'root'};
     my $authors_id = $p->{'auth_id'};
-    
 
-    $d = Dir($p->{'root'});
-    $d->create unless ($d->exists);
+    my @dirs = qw(A B C D E F G H I J K L M N O P Q R S T U V W X Y Z);
 
-    $d = Dir($p->{'root'}, $p->{'authors'});
-    $d->create unless ($d->exists);
-
-    $d = Dir($p->{'root'}, $p->{'modules'});
-    $d->create unless ($d->exists);
-
-    $d = Dir($p->{'root'}, $p->{'auth_id'});
-    $d->create unless ($d->exists);
+    $root->create       unless ($root->exists);
+    $authors->create    unless ($authors->exists);
+    $modules->create    unless ($modules->exists);
+    $authors_id->create unless ($authors_id->exists);
 
     foreach my $dir (@dirs) {
 
-        $d = Dir($p->{'root'}, $p->{'auth_id'}, $dir);
+        my $d = Dir($authors_id,  $dir);
         $d->create unless ($d->exists);
 
     }
+
+}
+
+sub create_authors {
+    my $self = shift;
+    my ($location) = $self->validate_params(\@_, [
+        { optional => 1, default => 'remote', regex => /LOCATION/ },
+    ]);
+
+    my $fh;
+    my $file = File($self->author, '01mailrc.txt.gz');
+    my $criteria = {
+        location => $location
+    };
+    my $options = {
+        order_by => 'pauseid'
+    };
+
+    unless ($fh = IO::Zlib->new($file->path, 'wb')) {
+
+        $self->throw_msg(
+            dotid($self->class) . '.create_authors.nocreate',
+            'nocreate',
+            $file->path
+        );
+
+    }
+
+    if (my ($rs = $self->authors->search($criteria, $options))) {
+
+        while (my $rec = $rs->next) {
+
+            $fh->printf('alias %-10s "%s <%s>"', $rec->pauseid, $rec->name, $rec->email);
+
+        }
+
+    }
+
+    $fh->close();
+
+}
+
+sub create_packages {
+    my $self = shift;
+    my ($location) = $self->validate_params(\@_, [
+        { optional => 1, default => 'remote', regex => qr/LOCATION/ },
+    ]);
+
+    my $fh;
+    my $module = $self->class;
+    my $program = $self->env->script;
+    my $date = DateTime->now(time_zone => 'UTC');
+    my $file = File($self->module, '02packages.details.txt.gz');
+
+    my $criteria = {
+        location => $location
+    };
+    my $options = {
+        order_by => 'module',
+        prefetch => 'packages',
+    };
+
+    unless ($fh = IO::Zlib->new($file->path, 'wb')) {
+
+        $self->throw_msg(
+            dotid($self->class) . '.create_packages.nocreate',
+            'nocreate',
+            $file->path
+        );
+
+    }
+
+    $fh->print (<<__HEADER);
+File:         02packages.details.txt
+URL:          file://$details
+Description:  Packages listed in CPAN and local repository
+Columns:      package name, version, path
+Intended-For: private CPAN
+Line-Count:   $lines
+Written-By:   $program with $module $VERSION (full)
+Last-Updated: $date->strftime('
+
+__HEADER
+
+    if (my ($rs = $self->packages->search($criteria, $options))) {
+
+        while (my $rec = $rs->next) {
+
+            $fh->printf("%-30s\t%s\t%s\n", $rec->module, $rec->version, $rec->package->path);
+
+        }
+
+    }
+
+    $fh->close();
 
 }
 
@@ -88,7 +178,6 @@ sub mirror {
        { isa => 'Badger::Filesystem::Directory' },
     ]);
 
-    my $schema  = $self->schema;
     my $auth_id = $self->authors_id;
     my $criteria = {
         location => 'remote'
@@ -100,7 +189,7 @@ sub mirror {
 
             my $file = File($destination, $rec->path);
             my $lock = $file->directory;
-            my $path = sprintf("%s/%s/%s", $rec->mirror, $auth_id, $rec->path); 
+            my $path = sprintf("%s/%s/%s", $rec->mirror, $auth_id, $rec->path);
             my $url  = Badger::URL->new($path)
 
             $lock->create unless ($lock->exists);
@@ -243,6 +332,15 @@ sub load_database {
     $self->authors->load();
     $self->mirrors->load();
     $self->pacakges->load();
+
+}
+
+sub clear_database {
+    my $self = shift;
+
+    $self->authors->clear();
+    $self->mirrors->clear();
+    $self->packages->clear();
 
 }
 
