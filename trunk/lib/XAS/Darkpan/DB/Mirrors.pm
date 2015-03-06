@@ -11,6 +11,7 @@ use DateTime;
 use JSON::XS;
 use Badger::URL;
 use Badger::Filesystem 'File';
+use Params::Validate 'HASHREF';
 use XAS::Darkpan::Parse::Mirrors;
 
 use XAS::Class
@@ -93,8 +94,8 @@ sub data {
 sub search {
     my $self = shift;
     my ($criteria, $options) = $self->validate_params(\@_, [
-        { optional => 1, default => {} },
-        { optional => 1, default => {} },
+        { optional => 1, default => {}, type => HASHREF },
+        { optional => 1, default => {}, type => HASHREF },
     ]);
 
     my $schema = $self->schema;
@@ -145,13 +146,14 @@ sub count {
         { optional => 1, default => 'remote', regex => qr/remote|local|all/ },
     ]);
 
+    my $schema = $self->schema;
     my $criteria = {
         location => $location
     };
 
-    $criteria = {} if ($location = 'all');
+    $criteria = {} if ($location eq 'all');
 
-    return Mirrors->count($criteria);
+    return Mirrors->count($schema, $criteria);
 
 }
 

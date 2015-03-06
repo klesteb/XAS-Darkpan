@@ -1,8 +1,9 @@
-package XAS::Spooler;
+package XAS::Darkpan;
 
 use 5.006;
 use strict;
 use warnings;
+our $VERSION = '0.01';
 
 =head1 NAME
 
@@ -14,7 +15,6 @@ Version 0.01
 
 =cut
 
-our $VERSION = '0.01';
 
 
 =head1 SYNOPSIS

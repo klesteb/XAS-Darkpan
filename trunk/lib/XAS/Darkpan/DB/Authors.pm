@@ -10,6 +10,7 @@ use XAS::Model::Database
 use DateTime;
 use Badger::URL;
 use Badger::Filesystem 'File';
+use Params::Validate 'HASHREF';
 use XAS::Lib::Darkpan::Author;
 use XAS::Darkpan::Parse::Authors;
 
@@ -92,8 +93,8 @@ sub data {
 sub search {
     my $self = shift;
     my ($criteria, $options) = $self->validate_params(\@_, [
-        { optional => 1, default => {} },
-        { optional => 1, default => {} },
+        { optional => 1, default => {}, type => HASHREF },
+        { optional => 1, default => {}, type => HASHREF},
     ]);
 
     my $schema = $self->schema;
@@ -144,13 +145,14 @@ sub count {
         { optional => 1, default => 'remote', regex => qr/remote|local|all/ },
     ]);
 
+    my $schema = $self->schema;
     my $criteria = {
         location => $location
     };
 
-    $criteria = {} if ($location = 'all');
+    $criteria = {} if ($location eq 'all');
 
-    return Authors->count($criteria);
+    return Authors->count($schema, $criteria);
 
 }
 

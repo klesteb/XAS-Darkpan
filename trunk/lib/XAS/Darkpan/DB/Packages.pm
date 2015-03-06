@@ -11,6 +11,7 @@ use DateTime;
 use Badger::URL;
 use CPAN::DistnameInfo;
 use Badger::Filesystem 'File';
+use Params::Validate 'HASHREF';
 use XAS::Lib::Darkpan::Package;
 use XAS::Darkpan::Parse::Packages;
 
@@ -26,7 +27,7 @@ use XAS::Class
   }
 ;
 
-use Data::Dumper;
+#use Data::Dumper;
 
 # ----------------------------------------------------------------------
 # Public Methods
@@ -66,7 +67,7 @@ sub add {
 
         Modules->create($schema, $module);
 
-        eval { Pacakges->create($schema, $package); }
+        eval { Packages->create($schema, $package); }
 
     });
 
@@ -75,8 +76,8 @@ sub add {
 sub search {
     my $self = shift;
     my ($criteria, $options) = $self->validate_params(\@_, [
-        { optional => 1, default => {} },
-        { optional => 1, default => {} },
+        { optional => 1, default => {}, type => HASHREF },
+        { optional => 1, default => {}, type => HASHREF },
     ]);
 
     my $schema = $self->schema;
@@ -102,7 +103,7 @@ sub data {
 
             push(@datum, XAS::Lib::Darkpan::Package->new(
                 -name    => $rec->module,
-                -version => ($rec->version eq '0.0') ? 'undef' : $rec->version,
+                -version => $rec->version,
                 -path    => $rec->packages->path
             ));
 
@@ -138,7 +139,7 @@ sub load {
         push(@datum, {
             pauseid  => $info->cpanid || 'unknown',
             module   => $data->{name},
-            version  => ($data->{version} eq 'undef') ? '0.0' : $data->{version},
+            version  => $data->{version} || 'undef',
             package  => $info->distvname,
             datetime => dt2db($dt),
         });
@@ -198,13 +199,18 @@ sub count {
         { optional => 1, default => 'remote', regex => qr/remote|local|all/ },
     ]);
 
+    my $count = 0;
+    my $schema = $self->schema;
     my $criteria = {
         location => $location
     };
 
-    $criteria = {} if ($location = 'all');
+    $criteria = {} if ($location eq 'all');
 
-    return $class->count($criteria);
+    $count = Packages->count($schema) if ($class eq 'Packages');
+    $count = Modules->count($schema, $criteria)  if ($class eq 'Modules');
+
+    return $count
 
 }
 

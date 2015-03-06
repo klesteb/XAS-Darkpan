@@ -5,6 +5,7 @@ our $VERSION = '0.01';
 use IO::Zlib;
 use DateTime;
 use Archive::Tar;
+use XAS::Darkpan;
 use CPAN::Checksums;
 use CPAN::DistnameInfo;
 use Params::Validate 'CODEREF';
@@ -36,7 +37,7 @@ use XAS::Class
       -authors_path    => { optional => 1, isa => 'Badger::Filesystem::Directory', default => Dir('/srv/dpan/authors') },
       -modules_path    => { optional => 1, isa => 'Badger::Filesystem::Directory', default => Dir('/srv/dpan/modules') },
       -authors_id_path => { optional => 1, isa => 'Badger::Filesystem::Directory', default => Dir('/srv/dpan/authors/id') },
-      -mirror          => { optional => 1, isa => 'Badger::URL', default => Badger::URL->new('http://www.cpan.org') },
+      -mirrors_url     => { optional => 1, isa => 'Badger::URL', default => Badger::URL->new('http://www.cpan.org') },
     }
   }
 ;
@@ -80,7 +81,7 @@ sub create {
 sub create_authors {
     my $self = shift;
     my ($location) = $self->validate_params(\@_, [
-        { optional => 1, default => 'remote', regex => /remote|local|all/ },
+        { optional => 1, default => 'remote', regex => qr/remote|local|all/ },
     ]);
 
     my $fh;
@@ -92,7 +93,7 @@ sub create_authors {
         order_by => 'pauseid'
     };
 
-    $critieria = {} if ($location eq 'all');
+    $criteria = {} if ($location eq 'all');
 
     unless ($fh = IO::Zlib->new($file->path, 'wb')) {
 
@@ -104,11 +105,11 @@ sub create_authors {
 
     }
 
-    if (my ($rs = $self->authors->search($criteria, $options))) {
+    if (my $rs = $self->authors->search($criteria, $options)) {
 
         while (my $rec = $rs->next) {
 
-            $fh->printf('alias %-10s "%s <%s>"', $rec->pauseid, $rec->name, $rec->email);
+            $fh->printf("alias %-10s \"%s <%s>\"\n", $rec->pauseid, $rec->name, $rec->email);
 
         }
 
@@ -120,21 +121,26 @@ sub create_authors {
 
 sub create_packages {
     my $self = shift;
-    my ($location) = $self->validate_params(\@_, [
+    my ($mirror, $location) = $self->validate_params(\@_, [
+        { optional => 1, default => $self->mirrors_url, isa => 'Badger::URL' },
         { optional => 1, default => 'remote', regex => qr/remote|local|all/ },
     ]);
 
     my $fh;
     my $module = $self->class;
     my $program = $self->env->script;
-    my $date = DateTime->now(time_zone => 'UTC');
+    my $dt = DateTime->now(time_zone => 'GMT');
     my $file = File($self->modules_path, '02packages.details.txt.gz');
+
+    my $date  = $dt->strftime('%a %b %d %H:%M:%S %Y %Z');
+    my $count = $self->packages->count('Modules') + 9;
+    my $path  = $mirror . '/modules/02packages.details.txt';
 
     my $criteria = {
         location => $location
     };
     my $options = {
-        order_by => 'module',
+        order_by => 'LOWER(module)',
         prefetch => 'packages',
     };
 
@@ -152,21 +158,21 @@ sub create_packages {
 
     $fh->print (<<__HEADER);
 File:         02packages.details.txt
-URL:          $self->mirror . '/modules/02packages.details.txt'
+URL:          $path
 Description:  Packages listed in CPAN and local repository
 Columns:      package name, version, path
 Intended-For: private CPAN
-Line-Count:   $self->packages->count('Packages')
-Written-By:   $program with $module $VERSION (full)
-Last-Updated: $date->strftime('%a %b %d %H:%M:%S %Y %Z')
+Line-Count:   $count
+Written-By:   $program with $module $XAS::Darkpan::VERSION (full)
+Last-Updated: $date
 
 __HEADER
 
-    if (my ($rs = $self->packages->search($criteria, $options))) {
+    if (my $rs = $self->packages->search($criteria, $options)) {
 
         while (my $rec = $rs->next) {
 
-            $fh->printf("%-30s\t%s\t%s\n", $rec->module, $rec->version, $rec->package->path);
+            $fh->printf("%-30s\t%s\t%s\n", $rec->module, $rec->version, $rec->packages->path);
 
         }
 
@@ -180,10 +186,11 @@ sub create_modlist {
     my $self = shift;
     
     my $fh;
-    my $date = DateTime->now(time_zone => 'UTC');
+    my $dt = DateTime->now(time_zone => 'GMT');
+    my $date = $dt->->strftime('%a %b %d %H:%M:%S %Y %Z');
     my $file = File($self->modules_path, '03modlist..gz');
-
-    unless ($fh = IO::Zlib->new($file->path, 'wb')) {
+      
+    unless ($fh = $file->open('w')) {
 
         $self->throw_msg(
             dotid($self->class) . '.create_packages.nocreate',
@@ -198,15 +205,15 @@ File:        03modlist.data
 Description: This was once the "registered module list" but has been retired.
         No replacement is planned.
 Modcount:    0
-Written-By:  XAS Darkpan 0.01
-Date:        $date->strftime('%a %b %d %H:%M:%S %Y %Z')
+Written-By:  XAS Darkpan $XAS::Darkpan::VERSION
+Date:        $date
 
 package CPAN::Modulelist;
 sub data {
 return {};
 }
 1;
-__MODLIST        
+__MODLIST
 
     $fh->close();
     
@@ -229,8 +236,8 @@ sub mirror {
 
             my $file = File($destination, $rec->path);
             my $lock = $file->directory;
-            my $path = sprintf("%s/%s/%s", $rec->mirror, $auth_id, $rec->path);
-            my $url  = Badger::URL->new($path)
+            my $path = sprintf("%s/%s/%s", $rec->mirrors_url, $auth_id, $rec->path);
+            my $url  = Badger::URL->new($path);
 
             $lock->create unless ($lock->exists);
 
@@ -618,17 +625,17 @@ sub init {
 
     $self->{packages} = XAS::Darkpan::DB::Packages->new(
         -schema => $self->schema,
-        -mirror => $self->mirror,
+        -url    => $self->mirrors_url,
     );
 
     $self->{authors} = XAS::Darkpan::DB::Authors->new(
         -schema => $self->schema,
-        -mirror => $self->mirror,
+        -url    => $self->mirrors_url,
     );
 
     $self->{mirrors} = XAS::Darkpan::DB::Mirrors->new(
         -schema => $self->schema,
-        -mirror => $self->mirror,
+        -url    => $self->mirrors_url,
     );
 
     $self->{lockmgr} = XAS::Lib::Modules::Locking->new();
