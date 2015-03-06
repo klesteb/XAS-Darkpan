@@ -139,6 +139,22 @@ sub clear {
 
 }
 
+sub count {
+    my $self = shift;
+    my ($location) = $self->validate_params(\@_, [
+        { optional => 1, default => 'remote', regex => qr/remote|local|all/ },
+    ]);
+
+    my $criteria = {
+        location => $location
+    };
+
+    $criteria = {} if ($location = 'all');
+
+    return Mirrors->count($criteria);
+
+}
+
 # ----------------------------------------------------------------------
 # Private Methods
 # ----------------------------------------------------------------------

@@ -193,7 +193,8 @@ sub clear {
 
 sub count {
     my $self = shift;
-    my ($location) = $self->validate_params(\@_, [
+    my ($class, $location) = $self->validate_params(\@_, [
+        { optional => 1, default => 'Packages', regex => qr/Packages|Modules/ },
         { optional => 1, default => 'remote', regex => qr/remote|local|all/ },
     ]);
 
@@ -203,7 +204,7 @@ sub count {
 
     $criteria = {} if ($location = 'all');
 
-    return Packages->count($criteria);
+    return $class->count($criteria);
 
 }
 

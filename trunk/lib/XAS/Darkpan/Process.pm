@@ -31,17 +31,17 @@ use XAS::Class
   },
   vars => {
     PARAMS => {
-      -schema    => 1,
-      -author    => { optional => 1, isa => 'Badger::Filesystem::Directory', default => Dir('/srv/dpan/authors') },
-      -module    => { optional => 1, isa => 'Badger::Filesystem::Directory', default => Dir('/srv/dpan/modules') },
-      -root      => { optional => 1, isa => 'Badger::Filesystem::Directory', default => Dir('/srv/dpan') },
-      -author_id => { optional => 1, isa => 'Badger::Filesystem::Directory', default => Dir('/srv/dpan/authors/id') },
-      -mirror    => { optional => 1, isa => 'Badger::URL', default => Badger::URL->new('http://www.cpan.org') },
+      -schema          => 1,
+      -root_path       => { optional => 1, isa => 'Badger::Filesystem::Directory', default => Dir('/srv/dpan') },
+      -authors_path    => { optional => 1, isa => 'Badger::Filesystem::Directory', default => Dir('/srv/dpan/authors') },
+      -modules_path    => { optional => 1, isa => 'Badger::Filesystem::Directory', default => Dir('/srv/dpan/modules') },
+      -authors_id_path => { optional => 1, isa => 'Badger::Filesystem::Directory', default => Dir('/srv/dpan/authors/id') },
+      -mirror          => { optional => 1, isa => 'Badger::URL', default => Badger::URL->new('http://www.cpan.org') },
     }
   }
 ;
 
-use Data::Dumper;
+#use Data::Dumper;
 
 # ----------------------------------------------------------------------
 # Public Methods
@@ -50,10 +50,10 @@ use Data::Dumper;
 sub create {
     my $self = shift;
     my $p = $self->validate_params(\@_, {
-        -root    => { optional => 1, isa => 'Badger::Filesystem::Directory', default => $self->root },
-        -authors => { optional => 1, isa => 'Badger::Filesystem::Directory', default => $self->author },
-        -modules => { optional => 1, isa => 'Badger::Filesystem::Directory', default => $self->module },
-        -auth_id => { optional => 1, isa => 'Badger::Filesystem::Directory', default => $self->authors_id },
+        -root    => { optional => 1, isa => 'Badger::Filesystem::Directory', default => $self->root_path },
+        -authors => { optional => 1, isa => 'Badger::Filesystem::Directory', default => $self->authors_path },
+        -modules => { optional => 1, isa => 'Badger::Filesystem::Directory', default => $self->modules_path },
+        -auth_id => { optional => 1, isa => 'Badger::Filesystem::Directory', default => $self->authors_id_path },
     });
 
     my $root       = $p->{'root'};
@@ -80,17 +80,19 @@ sub create {
 sub create_authors {
     my $self = shift;
     my ($location) = $self->validate_params(\@_, [
-        { optional => 1, default => 'remote', regex => /LOCATION/ },
+        { optional => 1, default => 'remote', regex => /remote|local|all/ },
     ]);
 
     my $fh;
-    my $file = File($self->author, '01mailrc.txt.gz');
+    my $file = File($self->authors_path, '01mailrc.txt.gz');
     my $criteria = {
         location => $location
     };
     my $options = {
         order_by => 'pauseid'
     };
+
+    $critieria = {} if ($location eq 'all');
 
     unless ($fh = IO::Zlib->new($file->path, 'wb')) {
 
@@ -119,14 +121,14 @@ sub create_authors {
 sub create_packages {
     my $self = shift;
     my ($location) = $self->validate_params(\@_, [
-        { optional => 1, default => 'remote', regex => qr/LOCATION/ },
+        { optional => 1, default => 'remote', regex => qr/remote|local|all/ },
     ]);
 
     my $fh;
     my $module = $self->class;
     my $program = $self->env->script;
     my $date = DateTime->now(time_zone => 'UTC');
-    my $file = File($self->module, '02packages.details.txt.gz');
+    my $file = File($self->modules_path, '02packages.details.txt.gz');
 
     my $criteria = {
         location => $location
@@ -135,6 +137,8 @@ sub create_packages {
         order_by => 'module',
         prefetch => 'packages',
     };
+
+    $criteria = {} if ($location eq 'all');
 
     unless ($fh = IO::Zlib->new($file->path, 'wb')) {
 
@@ -148,13 +152,13 @@ sub create_packages {
 
     $fh->print (<<__HEADER);
 File:         02packages.details.txt
-URL:          file://$details
+URL:          $self->mirror . '/modules/02packages.details.txt'
 Description:  Packages listed in CPAN and local repository
 Columns:      package name, version, path
 Intended-For: private CPAN
-Line-Count:   $lines
+Line-Count:   $self->packages->count('Packages')
 Written-By:   $program with $module $VERSION (full)
-Last-Updated: $date->strftime('
+Last-Updated: $date->strftime('%a %b %d %H:%M:%S %Y %Z')
 
 __HEADER
 
@@ -170,6 +174,42 @@ __HEADER
 
     $fh->close();
 
+}
+
+sub create_modlist {
+    my $self = shift;
+    
+    my $fh;
+    my $date = DateTime->now(time_zone => 'UTC');
+    my $file = File($self->modules_path, '03modlist..gz');
+
+    unless ($fh = IO::Zlib->new($file->path, 'wb')) {
+
+        $self->throw_msg(
+            dotid($self->class) . '.create_packages.nocreate',
+            'nocreate',
+            $file->path
+        );
+
+    }
+
+    $fh->print (<<__MODLIST);
+File:        03modlist.data
+Description: This was once the "registered module list" but has been retired.
+        No replacement is planned.
+Modcount:    0
+Written-By:  XAS Darkpan 0.01
+Date:        $date->strftime('%a %b %d %H:%M:%S %Y %Z')
+
+package CPAN::Modulelist;
+sub data {
+return {};
+}
+1;
+__MODLIST        
+
+    $fh->close();
+    
 }
 
 sub mirror {
@@ -213,8 +253,8 @@ sub inject {
     my $p = $self->validate_params(\@_, {
        -pauseid     => 1,
 	   -url         => { isa => 'Badger::URL', },
-       -location    => { optional => 1, default => 'local' },
        -destination => { isa => 'Badger::Filesystem::Directory' },
+       -location    => { optional => 1, default => 'local', regex => qr/LOCATION/ },
     });
 
     my $url         = $p->{'url'};
@@ -245,6 +285,29 @@ sub inject {
         $self->lockmgr->unlock_directory($lock);
 
     }
+
+}
+
+sub inject_author {
+    my $self = shift;
+    my $p = $self->validate_params(\@_, {
+       -pauseid  => 1,
+       -name     => 1,
+       -email    => 1,
+       -location => { optional => 1, default => 'local', regex => qr/LOCATION/ },
+    });
+
+    my $name     = $p->{'name'};
+    my $email    = $p->{'email'};
+    my $location = $p->{'location'};
+    my $pauseid  = $p->{'pauseid'};
+
+    $self->authors->add(
+        -name     => $name,
+        -email    => $email,
+        -pauseid  => $pauseid,
+        -location => $location,
+    );
 
 }
 
@@ -434,7 +497,7 @@ sub _register {
     my $self = shift;
     my ($package, $version, $dist, $location) = $self->validate_params(\@_, [1,1,1,1]);
 
-    my $auth_id = $self->authors_id;
+    my $auth_id = $self->authors_id_path;
     ($dist) = $dist =~ /$auth_id\/(.*)/;
 
     $self->packages->add(

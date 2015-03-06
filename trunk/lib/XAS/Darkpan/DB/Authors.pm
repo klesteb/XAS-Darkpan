@@ -46,9 +46,10 @@ sub remove {
 sub add {
     my $self = shift;
     my $p = $self->validate_params(\@_, {
-        -pauseid => 1,
-        -name    => 1,
-        -email   => 1,
+        -pauseid  => 1,
+        -name     => 1,
+        -email    => 1,
+        -location => { regex => qr/remote|local/ },
     });
 
     my $schema = $self->schema;
@@ -134,6 +135,22 @@ sub clear {
     };
 
     Authors->delete_records($schema, $criteria);
+
+}
+
+sub count {
+    my $self = shift;
+    my ($location) = $self->validate_params(\@_, [
+        { optional => 1, default => 'remote', regex => qr/remote|local|all/ },
+    ]);
+
+    my $criteria = {
+        location => $location
+    };
+
+    $criteria = {} if ($location = 'all');
+
+    return Authors->count($criteria);
 
 }
 
