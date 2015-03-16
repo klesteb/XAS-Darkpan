@@ -81,7 +81,7 @@ sub create {
 sub create_authors {
     my $self = shift;
     my ($location) = $self->validate_params(\@_, [
-        { optional => 1, default => 'remote', regex => qr/remote|local|all/ },
+        { optional => 1, default => 'local', regex => qr/remote|local|all/ },
     ]);
 
     my $fh;
@@ -123,7 +123,7 @@ sub create_packages {
     my $self = shift;
     my ($mirror, $location) = $self->validate_params(\@_, [
         { optional => 1, default => $self->mirrors_url, isa => 'Badger::URL' },
-        { optional => 1, default => 'remote', regex => qr/remote|local|all/ },
+        { optional => 1, default => 'local', regex => qr/remote|local|all/ },
     ]);
 
     my $fh;

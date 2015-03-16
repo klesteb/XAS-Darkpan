@@ -196,7 +196,7 @@ sub count {
     my $self = shift;
     my ($class, $location) = $self->validate_params(\@_, [
         { optional => 1, default => 'Packages', regex => qr/Packages|Modules/ },
-        { optional => 1, default => 'remote', regex => qr/remote|local|all/ },
+        { optional => 1, default => 'local', regex => qr/remote|local|all/ },
     ]);
 
     my $count = 0;
