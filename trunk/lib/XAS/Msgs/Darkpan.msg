@@ -14,3 +14,4 @@ noarch     = unknow archive type: %s
 nofiles    = no files found in archive, reason: %s
 unknownarc = unknown archive type: %s
 badrequest = a bad request was made to: %s, reasom: %s
+processed  = processed: %s

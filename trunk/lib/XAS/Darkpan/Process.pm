@@ -247,6 +247,8 @@ sub mirror {
                 $self->checksum($file->directory);
                 $self->lockmgr->unlock_directory($lock);
 
+                $self->log->info_msg('processed', $url);
+
             }
 
         }
