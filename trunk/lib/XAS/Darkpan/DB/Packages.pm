@@ -218,6 +218,21 @@ sub count {
 # Private Methods
 # ----------------------------------------------------------------------
 
+sub init {
+    my $class = shift;
+
+    my $self = $class->SUPER::init(@_);
+
+    unless ($self->url->path) {
+
+        $self->url->path('/modules/02packages.details.txt.gz');
+
+    }
+
+    return $self;
+
+}
+
 1;
 
 __END__

@@ -24,10 +24,10 @@ use XAS::Class
   accessors  => 'packages authors mirrors lockmgr',
   utils      => 'dotid left',
   constant => {
-    PACKAGE => qr/\.pm$/,
-    META    => qr/META\.json$|META\.yml$|META\.yaml$/,
-    TAR     => qr/\.tar\.gz$|\.tar\.Z$|\.tgz$/,
-    ZIP     => qr/\.zip$/,
+    PACKAGE  => qr/\.pm$/,
+    META     => qr/META\.json$|META\.yml$|META\.yaml$/,
+    TAR      => qr/\.tar\.gz$|\.tar\.Z$|\.tgz$/,
+    ZIP      => qr/\.zip$/,
     LOCATION => qr/remote|local/,
   },
   vars => {
