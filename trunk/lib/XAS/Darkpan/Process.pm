@@ -48,7 +48,7 @@ use XAS::Class
 # Public Methods
 # ----------------------------------------------------------------------
 
-sub create {
+sub create_dirs {
     my $self = shift;
     my $p = $self->validate_params(\@_, {
         -root    => { optional => 1, isa => 'Badger::Filesystem::Directory', default => $self->root_path },
@@ -187,7 +187,7 @@ sub create_modlist {
     
     my $fh;
     my $dt = DateTime->now(time_zone => 'GMT');
-    my $date = $dt->->strftime('%a %b %d %H:%M:%S %Y %Z');
+    my $date = $dt->strftime('%a %b %d %H:%M:%S %Y %Z');
     my $file = File($self->modules_path, '03modlist..gz');
       
     unless ($fh = $file->open('w')) {
@@ -475,7 +475,7 @@ sub _collect_package_details {
 
         if ( m/^ (?:use\s+version\s*;\s*)?
             (?:our)? \s* \$ ((?: \w+\:\:)*) VERSION \s* \= (.*)/x ) {
-            
+
             defined $2 or next;
             my ($ns, $vers) = ($1, $2);
 

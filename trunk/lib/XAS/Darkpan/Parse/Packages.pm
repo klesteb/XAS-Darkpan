@@ -2,6 +2,7 @@ package XAS::Darkpan::Parse::Packages;
 
 our $VERSION = '0.01';
 
+use Badger::URL;
 use Badger::Filesystem 'File';
 use Params::Validate 'CODEREF';
 
@@ -12,7 +13,7 @@ use XAS::Class
   accessors => 'data meta',
   vars => {
     PARAMS => {
-      -url => { isa => 'Badger::URL' },
+      -url => { optional => 1, isa => 'Badger::URL', default => Badger::URL->new('http://www.cpan.org/modules/02packages.details.txt.gz') },
     }
   }
 ;

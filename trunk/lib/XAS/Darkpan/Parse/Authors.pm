@@ -2,6 +2,7 @@ package XAS::Darkpan::Parse::Authors;
 
 our $VERSION = '0.01';
 
+use Badger::URL;
 use Badger::Filesystem 'File';
 use Params::Validate 'CODEREF';
 
@@ -12,10 +13,12 @@ use XAS::Class
   accessors => 'data',
   vars => {
     PARAMS => {
-      -url => { isa => 'Badger::URL' },
+      -url => { optional => 1, isa => 'Badger::URL', default => Badger::URL->new('http://www.cpan.org/authors/01mailrc.txt.gz') },
     }
   }
 ;
+
+#use Data::Dumper;
 
 # ----------------------------------------------------------------------
 # Public Methods

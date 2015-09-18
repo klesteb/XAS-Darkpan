@@ -2,6 +2,8 @@ package XAS::Darkpan::Parse::Recent;
 
 our $VERSION = '0.01';
 
+use YAML::XS;
+use Badger::URL;
 use Badger::Filesystem 'File';
 use Params::Validate 'CODEREF';
 
@@ -10,10 +12,9 @@ use XAS::Class
   version   => $VERSION,
   base      => 'XAS::Darkpan::Base',
   accessors => 'data meta',
-  codec     => 'JSON',
   vars => {
     PARAMS => {
-      -url => { isa => 'Badger::URL' },
+      -url => { optional => 1, isa => 'Badger::URL', default => Badger::URL->new('http://www.cpan.org/authors/RECENT.recent') },
     }
   }
 ;
@@ -50,7 +51,7 @@ sub init {
     my $self = $class->SUPER::init(@_);
     my $content = $self->fetch($self->url);
 
-    $self->{data} = decode($content);
+    $self->{data} = Load($content);
 
     return $self;
 
