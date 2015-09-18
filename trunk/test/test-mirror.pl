@@ -13,7 +13,7 @@ my $process = XAS::Darkpan::Process->new(
     -xdebug => 1,
 );
 
-$process->create_dirs();
-$process->load_database():
+#$process->create_dirs();
+#$process->load_database():
 $process->mirror( Dir('/srv/dpan/authors/id') );
 

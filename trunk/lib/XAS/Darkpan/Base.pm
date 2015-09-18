@@ -12,6 +12,7 @@ use XAS::Class
   version    => $VERSION,
   base       => 'XAS::Base',
   accessors  => 'cache curl',
+  utils      => 'dotid',
   filesystem => 'File',
   vars => {
     PARAMS => {
@@ -57,6 +58,7 @@ sub fetch {
                 $self->throw_msg(
                     dotid($self->class) . '.fetch.request',
                     'badrequest',
+                    $url,
                     $response->status_line
                 );
 

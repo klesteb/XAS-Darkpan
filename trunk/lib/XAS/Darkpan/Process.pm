@@ -37,7 +37,7 @@ use XAS::Class
       -authors_path    => { optional => 1, isa => 'Badger::Filesystem::Directory', default => Dir('/srv/dpan/authors') },
       -modules_path    => { optional => 1, isa => 'Badger::Filesystem::Directory', default => Dir('/srv/dpan/modules') },
       -authors_id_path => { optional => 1, isa => 'Badger::Filesystem::Directory', default => Dir('/srv/dpan/authors/id') },
-      -mirrors_url     => { optional => 1, isa => 'Badger::URL', default => Badger::URL->new('http://www.cpan.org') },
+      -mirror_url      => { optional => 1, isa => 'Badger::URL', default => Badger::URL->new('http://www.cpan.org') },
     }
   }
 ;
@@ -122,7 +122,7 @@ sub create_authors {
 sub create_packages {
     my $self = shift;
     my ($mirror, $location) = $self->validate_params(\@_, [
-        { optional => 1, default => $self->mirrors_url, isa => 'Badger::URL' },
+        { optional => 1, default => $self->mirror_url, isa => 'Badger::URL' },
         { optional => 1, default => 'local', regex => qr/remote|local|all/ },
     ]);
 
@@ -189,7 +189,7 @@ sub create_modlist {
     my $dt = DateTime->now(time_zone => 'GMT');
     my $date = $dt->strftime('%a %b %d %H:%M:%S %Y %Z');
     my $file = File($self->modules_path, '03modlist..gz');
-      
+
     unless ($fh = $file->open('w')) {
 
         $self->throw_msg(
@@ -225,7 +225,7 @@ sub mirror {
        { isa => 'Badger::Filesystem::Directory' },
     ]);
 
-    my $auth_id = $self->authors_id;
+    my $auth_id = 'authors/id';
     my $criteria = {
         location => 'remote'
     };
@@ -234,9 +234,9 @@ sub mirror {
 
         while (my $rec = $rs->next) {
 
-            my $file = File($destination, $rec->path);
+            my $file = File($destination, $rec->packages->path);
             my $lock = $file->directory;
-            my $path = sprintf("%s/%s/%s", $rec->mirrors_url, $auth_id, $rec->path);
+            my $path = sprintf("%s/%s/%s", $rec->packages->mirror, $auth_id, $rec->packages->path);
             my $url  = Badger::URL->new($path);
 
             $lock->create unless ($lock->exists);
@@ -320,7 +320,7 @@ sub inject_author {
 
 sub copy {
     my $self = shift;
-    my ($url, $file) = $self->validate_params(\@_ [
+    my ($url, $file) = $self->validate_params(\@_, [
 	   { isa => 'Badger::URL' },
        { isa => 'Badger::Filesystem::File' },
     ]);
@@ -400,8 +400,13 @@ sub load_database {
     my $self = shift;
 
     $self->authors->load();
+    $self->log->info('loaded authors');
+
     $self->mirrors->load();
-    $self->pacakges->load();
+    $self->log->info('loaded mirrors');
+
+    $self->packages->load();
+    $self->log->info('loaded packages');
 
 }
 
@@ -409,8 +414,13 @@ sub clear_database {
     my $self = shift;
 
     $self->authors->clear();
+    $self->log->info('cleared authors');
+
     $self->mirrors->clear();
+    $self->log->info('cleared mirrors');
+
     $self->packages->clear();
+    $self->log->info('cleared packages');
 
 }
 
@@ -623,19 +633,29 @@ sub init {
 
     my $self = $class->SUPER::init(@_);
 
+    my $authors  = $self->mirror_url->copy();
+    my $mirrors  = $self->mirror_url->copy();
+    my $packages = $self->mirror_url->copy();
+
+    $packages->path('/modules/02packages.details.txt.gz');
+
     $self->{packages} = XAS::Darkpan::DB::Packages->new(
         -schema => $self->schema,
-        -url    => $self->mirrors_url,
+        -url    => $packages,
     );
+
+    $authors->path('/authors/01mailrc.txt.gz');
 
     $self->{authors} = XAS::Darkpan::DB::Authors->new(
         -schema => $self->schema,
-        -url    => $self->mirrors_url,
+        -url    => $authors,
     );
+
+    $mirrors->path('/modules/07mirror.json');
 
     $self->{mirrors} = XAS::Darkpan::DB::Mirrors->new(
         -schema => $self->schema,
-        -url    => $self->mirrors_url,
+        -url    => $mirrors,
     );
 
     $self->{lockmgr} = XAS::Lib::Modules::Locking->new();

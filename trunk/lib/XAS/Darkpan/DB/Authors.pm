@@ -27,6 +27,8 @@ use XAS::Class
   }
 ;
 
+use Data::Dumper;
+
 # ----------------------------------------------------------------------
 # Public Methods
 # ----------------------------------------------------------------------
@@ -118,6 +120,7 @@ sub load {
     $authors->parse(sub {
         my $data = shift;
         $data->{datetime} = dt2db($dt);
+        return unless (defined($data->{'pauseid'}));
         push(@datum, $data);
     });
 
@@ -159,21 +162,6 @@ sub count {
 # ----------------------------------------------------------------------
 # Private Methods
 # ----------------------------------------------------------------------
-
-sub init {
-    my $class = shift;
-
-    my $self = $class->SUPER::init(@_);
-
-    unless ($self->url->path) {
-
-        $self->url->path('/authors/01mailrc.txt.gz');
-
-    }
-
-    return $self;
-
-}
 
 1;
 
