@@ -18,19 +18,44 @@ __PACKAGE__->add_columns(
         is_nullable       => 0,
         sequence          => 'packages_id_seq',
     },
-    name => {
+    package => {
         data_type   => 'varchar',
         size        => 255,
         is_nullable => 0,
     },
-    path => {
+    dist => {
         data_type   => 'varchar',
-        size        => 255,
+        size        => 32,
+        is_nullable => 0,
+    },
+    version => {
+        data_type   => 'varchar',
+        size        => 8,
         is_nullable => 0,
     },
     maturity => {
         data_type   => 'varchar',
         size        => 32,
+        is_nullable => 0,
+    },
+    filename => {
+        data_type   => 'varchar',
+        size        => 255,
+        is_nullable => 0,
+    },
+    pauseid => {
+        data_type   => 'varchar',
+        size        => 32,
+        is_nullable => 0,
+    },
+    extension => {
+        data_type   => 'varchar',
+        size        => 8,
+        is_nullable => 0,
+    },
+    pathname => {
+        data_type   => 'varchar',
+        size        => 255,
         is_nullable => 0,
     },
     mirror => {
@@ -49,14 +74,19 @@ __PACKAGE__->add_columns(
 );
 
 __PACKAGE__->set_primary_key('id');
-__PACKAGE__->add_unique_constraint(packages_name_idx => ['name','mirror']);
+__PACKAGE__->add_unique_constraint(packages_name_idx => ['package','mirror']);
 
 __PACKAGE__->optimistic_locking_strategy('version');
 __PACKAGE__->optimistic_locking_version_column('revision');
 
-__PACKAGE__->belongs_to( 
-    modules => 'XAS::Model::Database::Darkpan::Result::Modules', 
-    { 'foreign.package' => 'self.name' },
+__PACKAGE__->has_many( 
+    modules => 'XAS::Model::Database::Darkpan::Result::Provides', 
+    { 'foreign.package_id' => 'self.id' },
+);
+
+__PACKAGE__->has_many( 
+    modules => 'XAS::Model::Database::Darkpan::Result::Requires', 
+    { 'foreign.package_id' => 'self.id' },
 );
 
 __PACKAGE__->has_one( 

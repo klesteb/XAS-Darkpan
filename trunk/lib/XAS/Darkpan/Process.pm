@@ -4,15 +4,16 @@ our $VERSION = '0.01';
 
 use IO::Zlib;
 use DateTime;
+use CPAN::Meta;
 use Archive::Tar;
 use XAS::Darkpan;
 use CPAN::Checksums;
 use CPAN::DistnameInfo;
 use Params::Validate 'CODEREF';
-use XAS::Lib::Modules::Locking;
 use XAS::Darkpan::DB::Authors;
 use XAS::Darkpan::DB::Mirrors;
 use XAS::Darkpan::DB::Packages;
+use XAS::Lib::Modules::Locking;
 use Archive::Zip ':ERROR_CODES';
 use Badger::Filesystem 'Dir File';
 use File::Spec::Functions qw/splitdir/;
@@ -131,20 +132,11 @@ sub create_packages {
     my $program = $self->env->script;
     my $dt = DateTime->now(time_zone => 'GMT');
     my $file = File($self->modules_path, '02packages.details.txt.gz');
+    my $packages = $self->packages->data(-criteria => { location => $location });
 
     my $date  = $dt->strftime('%a %b %d %H:%M:%S %Y %Z');
-    my $count = $self->packages->count('Modules') + 9;
+    my $count = $self->packages->count() + 9;
     my $path  = $mirror . '/modules/02packages.details.txt';
-
-    my $criteria = {
-        location => $location
-    };
-    my $options = {
-        order_by => 'LOWER(module)',
-        prefetch => 'packages',
-    };
-
-    $criteria = {} if ($location eq 'all');
 
     unless ($fh = IO::Zlib->new($file->path, 'wb')) {
 
@@ -168,13 +160,9 @@ Last-Updated: $date
 
 __HEADER
 
-    if (my $rs = $self->packages->search($criteria, $options)) {
+    foreach my $package (@$packages) {
 
-        while (my $rec = $rs->next) {
-
-            $fh->printf("%-30s\t%s\t%s\n", $rec->module, $rec->version, $rec->packages->path);
-
-        }
+        $fh->printf("%s\n", $package->to_string);
 
     }
 
@@ -184,7 +172,7 @@ __HEADER
 
 sub create_modlist {
     my $self = shift;
-    
+
     my $fh;
     my $dt = DateTime->now(time_zone => 'GMT');
     my $date = $dt->strftime('%a %b %d %H:%M:%S %Y %Z');
@@ -216,7 +204,7 @@ return {};
 __MODLIST
 
     $fh->close();
-    
+
 }
 
 sub mirror {
@@ -225,31 +213,23 @@ sub mirror {
        { isa => 'Badger::Filesystem::Directory' },
     ]);
 
-    my $auth_id = 'authors/id';
-    my $criteria = {
-        location => 'remote'
+    my $options = {
+        order_by => 'package',
     };
 
-    if (my $rs = $self->packages->search($criteria)) {
+    if (my $rs = $self->packages->search(-options => $options)) {
 
         while (my $rec = $rs->next) {
 
-            my $file = File($destination, $rec->packages->path);
-            my $lock = $file->directory;
-            my $path = sprintf("%s/%s/%s", $rec->packages->mirror, $auth_id, $rec->packages->path);
+            my $path = sprintf("%s/%s", $rec->mirror, $rec->pathname);
             my $url  = Badger::URL->new($path);
 
-            $lock->create unless ($lock->exists);
-
-            if ($self->lockmgr->lock_directory($lock)) {
-
-                $self->copy($url, $file);
-                $self->checksum($file->directory);
-                $self->lockmgr->unlock_directory($lock);
-
-                $self->log->info_msg('processed', $url);
-
-            }
+            $self->inject(
+                -url         => $url,
+                -pauseid     => $rec->pauseid,
+                -package_id  => $rec->id,
+                -destination => $destination,
+            );
 
         }
 
@@ -261,14 +241,16 @@ sub inject {
     my $self = shift;
     my $p = $self->validate_params(\@_, {
        -pauseid     => 1,
+       -package_id  => 1,
 	   -url         => { isa => 'Badger::URL', },
        -destination => { isa => 'Badger::Filesystem::Directory' },
-       -location    => { optional => 1, default => 'local', regex => qr/LOCATION/ },
+       -location    => { optional => 1, default => 'local', regex => LOCATION },
     });
 
     my $url         = $p->{'url'};
-    my $location    = $p->{'location'};
     my $pauseid     = $p->{'pauseid'};
+    my $location    = $p->{'location'};
+    my $package_id  = $p->{'package_id'};
     my $destination = $p->{'destination'};
 
     my $file;
@@ -288,7 +270,7 @@ sub inject {
     if ($self->lockmgr->lock_directory($lock)) {
 
         $self->copy($url, $file);
-        $self->inspect_archive($file, $location);
+        $self->inspect_archive($file, $package_id);
         $self->checksum($file->directory);
 
         $self->lockmgr->unlock_directory($lock);
@@ -352,22 +334,22 @@ sub checksum {
 
 sub inspect_archive {
     my $self = shift;
-    my ($file, $location) = $self->validate_params(\@_, [1,1]);
+    my ($file, $package_id) = $self->validate_params(\@_, [1,1]);
 
     if ($file->path =~ m/TAR/i) {
 
         $self->_inspect_tar_archive(
-            -filename => $file, 
-            -filter   => PACKAGE, 
-            -location => $location,
-            -callback => \&_collect_package_details
+            -filename   => $file, 
+            -filter     => PACKAGE, 
+            -package_id => $package_id,
+            -callback   => \&_collect_package_details
         );
 
         $self->_inspect_tar_archive(
-            -filename => $file, 
-            -filter   => META, 
-            -location => $location,
-            -callback => sub {}
+            -filename   => $file, 
+            -filter     => META, 
+            -package_id => $package_id,
+            -callback   => sub {}
         );
 
     } elsif ($file->path =~ m/ZIP/i) {
@@ -375,15 +357,15 @@ sub inspect_archive {
         $self->_inspect_zip_archive(
             -filename => $file, 
             -filter   => PACKAGE, 
-            -location => $location,
+            -package_id => $package_id,
             -callback => \&_collect_package_details
         );
 
         $self->_inspect_zip_archive(
-            -filename => $file, 
-            -filter   => META, 
-            -location => $location,
-            -callback => sub {}
+            -filename   => $file, 
+            -filter     => META, 
+            -package_id => $package_id,
+            -callback   => sub {}
         );
 
     } else {
@@ -442,14 +424,29 @@ sub _package_at_usual_location {
 
 }
 
+sub _collect_meta_details {
+    my $self = shift;
+    my ($path, $package_id, $content) = $self->validate_params(\@_, [1,1,1]);
+
+    my $meta = CPAN::Meta->load_string($content);
+    my $prereqs = $meta->effective_prereqs();
+    
+    foreach my $provided ($prereqs->requirements_for('','')) {
+        
+    }
+
+}
+
 sub _collect_package_details {   
     my $self = shift;
-    my ($fn, $dist, $content, $location) = $self->validate_params(\@_, [1,1,1,1]);
+    my ($path, $package_id, $content) = $self->validate_params(\@_, [1,1,1]);
+
+
 
     my @lines  = split(/\r?\n/, $$content);
     my $in_pod = 0;
     my $package;
-    
+
     local $VERSION = undef;  # may get destroyed by eval
 
     while (@lines) {
@@ -463,7 +460,7 @@ sub _collect_package_details {
         $_ .= shift @lines while m/package|use|VERSION/ && !m/\;/;
 
         if ( m/^\s* package \s* ((?:\w+\:\:)*\w+) (?:\s+ (\S*))? \s* ;/x ) {
-              
+
             my ($thispkg, $v) = ($1, $2);
             my $thisversion;
 
@@ -477,7 +474,7 @@ sub _collect_package_details {
 
             # second package in file?
 
-            $self->_register($package, $VERSION, $dist, $location) if (defined($package));
+            $self->_register($package, $VERSION, $dist, $package_id) if (defined($package));
 
             ($package, $VERSION) = ($thispkg, $thisversion);
 
@@ -508,22 +505,23 @@ sub _collect_package_details {
     }
 
     $VERSION = $VERSION->numify if (ref($VERSION));
-    $self->_register($package, $VERSION, $dist, $location) if defined $package;
+    $self->_register($package, $VERSION, $dist, $package_id, $location) if defined $package;
 
 }
 
 sub _register {
     my $self = shift;
-    my ($package, $version, $dist, $location) = $self->validate_params(\@_, [1,1,1,1]);
+    my ($package, $version, $dist, $package_id, $location) = $self->validate_params(\@_, [1,1,1,1]);
 
     my $auth_id = $self->authors_id_path;
     ($dist) = $dist =~ /$auth_id\/(.*)/;
 
-    $self->packages->add(
-        -name     => $package,
-        -version  => $version,
-        -path     => $dist,
-        -location => $location,
+    $self->provides->add(
+        -package_id => $package_id,
+        -module     => $package,
+        -version    => $version,
+        -pathname   => $dist,
+        -datetime   => dt2db($dt),
     );
 
 }
@@ -531,8 +529,8 @@ sub _register {
 sub _inspect_tar_archive {
     my $self = shift;
     my $p = $self->validate_params(\@_, {
-        -filename => { isa => 'Badger::Filesystem::File' },
-        -location => { optional => 1, default => 'remote' },
+        -package_id => 1,
+        -filename   => { isa => 'Badger::Filesystem::File' },
         -filter => { callbacks => {
             'must be a compiled regex' => sub {
                     return ref(shift) eq 'Regexp';
@@ -543,22 +541,22 @@ sub _inspect_tar_archive {
     });
 
     my $arc;
-    my $dist = $p->{'filename'};
     my $filter = $p->{'filter'};
+    my $archive = $p->{'filename'};
     my $callback = $p->{'callback'};
-    my $location = $p->{'location'};
+    my $package_id = $p->{'package_id'};
 
-    if ($arc = Archive::Tar->new($dist->path, 1)) {
+    if ($arc = Archive::Tar->new($archive->path, 1)) {
 
         foreach my $file ($arc->get_files) {
 
             my $path = $file->full_path;
-              
+
             next unless ($file->is_file && 
                          $path =~ m/$filter/i && 
                          $self->_package_at_usual_location($path));
 
-            $callback->($self, $path, $dist, $file->get_content_by_ref, $location);
+            $callback->($self, $path, $package_id, $file->get_content_by_ref);
 
         }
 
@@ -577,8 +575,8 @@ sub _inspect_tar_archive {
 sub _inspect_zip_archive {
     my $self = shift;
     my $p = $self->validate_params(\@_, {
-        -filename => { isa => 'Badger::Filesystem::File' },
-        -location => { optional => 1, default => 'remote' },
+        -package_id => 1,
+        -filename   => { isa => 'Badger::Filesystem::File' },
         -filter => { callbacks => {
             'must be a compiled regex' => sub {
                     return ref(shift) eq 'Regexp';
@@ -589,12 +587,12 @@ sub _inspect_zip_archive {
     });
 
     my $arc;
-    my $dist = $p->{'filename'};
     my $filter = $p->{'filter'};
+    my $archive = $p->{'filename'};
     my $callback = $p->{'callback'};
-    my $location = $p->{'location'};
+    my $package_id = $p->{'package_id'};
 
-    if ($arc = Archive::Zip->new($dist->path)) {
+    if ($arc = Archive::Zip->new($archive->path)) {
 
         foreach my $member ($arc->membersMatching($filter)) {
 
@@ -614,7 +612,7 @@ sub _inspect_zip_archive {
 
             }
 
-            $callback->($self, $file, $dist, \$contents, $location);
+            $callback->($self, $file, $package_id, \$contents);
 
         }
 

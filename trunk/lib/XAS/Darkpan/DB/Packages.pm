@@ -4,7 +4,7 @@ our $VERSION = '0.01';
 
 use XAS::Model::Database
   schema => 'XAS::Model::Database::Darkpan',
-  tables => 'Modules Packages'
+  tables => 'Packages Requires Provides'
 ;
 
 use DateTime;
@@ -22,7 +22,7 @@ use XAS::Class
   utils   => 'dt2db',
   vars => {
     PARAMS => {
-      -url => { isa => 'Badger::URL' },
+      -url => { optional => 1, isa => 'Badger::URL', default => Badger::URL->new('http://www.cpan.org/modules/02packages.details.txt.gz') },
     }
   }
 ;
@@ -36,8 +36,6 @@ use XAS::Class
 sub add {
     my $self = shift;
     my $p = $self->validate_params(\@_, {
-       -name     => 1,
-       -version  => 1,
        -path     => 1,
        -mirror   => { optional => 1, default => $self->url->server },
        -location => { optional => 1, default => 'remote', regex => qr/remote|local/ },
@@ -47,27 +45,24 @@ sub add {
     my $schema = $self->schema;
     my $dt = DateTime->now(time_zone => 'local');
     my $info = CPAN::DistnameInfo->new($p->{path});
-    my $module = {
-        pauseid   => $info->cpanid,
-        module    => $p->{'name'},
-        version   => $p->{'version'} || 'undef',
-        package   => $info->distvname,
+    my ($package) = $info->dist =~ s/-/::/;
+
+    my $data = {      
+        package   => $package,
+        dist      => $info->dist,
+        version   => $info->version   || '0.0',
+        maturity  => $info->maturity  || 'unknown',
+        filename  => $info->filename,
+        pauseid   => $info->cpanid    || 'unknown',
+        extension => $info->extension,
+        pathname  => $info->pathname,
+        mirror    => $self->url->server,
         datetime  => dt2db($dt),
-        location  => $p->{'location'}, 
-    };
-    my $package = {
-        name     => $info->distvname,
-        maturity => $info->maturity,
-        path     => $info->pathname,
-        mirror   => $p->{'mirror'},
-        datetime => dt2db($dt),
     };
 
     $schema->txn_do(sub {
 
-        Modules->create($schema, $module);
-
-        eval { Packages->create($schema, $package); }
+        Packages->create($schema, $data); 
 
     });
 
@@ -75,36 +70,35 @@ sub add {
 
 sub search {
     my $self = shift;
-    my ($criteria, $options) = $self->validate_params(\@_, [
-        { optional => 1, default => {}, type => HASHREF },
-        { optional => 1, default => {}, type => HASHREF },
-    ]);
+    my $p = $self->validate_params(\@_, {
+       -criteria => { optional => 1, type => HASHREF, default => {} },
+       -options  => { optional => 1, type => HASHREF, default => {} },
+    });
 
     my $schema = $self->schema;
 
-    return Modules->search($schema, $criteria, $options);
+    return Packages->search($schema, $p->{'criteria'}, $p->{'options'});
 
 }
 
 sub data {
     my $self = shift;
+    my $p = $self->validate_params(\@_, {
+       -criteria => { optional => 1, type => HASHREF, default => { location => 'all'} },
+       -options  => { optional => 1, type => HASHREF, default => { order_by => 'packages', prefetch => ['provides','requires']} },
+    });
 
     my @datum = ();
-    my $criteria = {};
     my $schema = $self->schema;
-    my $options = {
-        order_by => 'module',
-        prefetch => 'packages',
-    };
 
-    if (my $rs = Modules->search($schema, $criteria, $options)) {
+    if (my $rs = Packages->search($schema, $p->{'criteria'}, $p->{'options'})) {
 
         while (my $rec = $rs->next) {
 
             push(@datum, XAS::Lib::Darkpan::Package->new(
-                -name    => $rec->module,
-                -version => $rec->version,
-                -path    => $rec->packages->path
+                -name    => $rec->provides->module,
+                -version => $rec->provides->version,
+                -path    => $rec->packages->pathname
             ));
 
         }
@@ -120,7 +114,6 @@ sub load {
 
     my $hash;
     my @recs;
-    my @datum;
     my $schema = $self->schema;
     my $dt = DateTime->now(time_zone => 'local');
     my $packages = XAS::Darkpan::Parse::Packages->new(
@@ -136,21 +129,21 @@ sub load {
 
     	return unless ($info->distvname);
 
-        push(@datum, {
-            pauseid  => $info->cpanid || 'unknown',
-            module   => $data->{name},
-            version  => $data->{version} || 'undef',
-            package  => $info->distvname,
-            datetime => dt2db($dt),
-        });
-
         # filter the packages
 
-        $hash->{$info->distvname} = {
-            maturity => $info->maturity || 'unknown',
-            path     => $info->pathname,
-            mirror   => $self->url->server,
-            datetime => dt2db($dt),
+        my $package = $info->dist;
+        $package =~ s/-/::/g;
+
+        $hash->{$package} = {      
+            dist      => $info->dist,
+            version   => $info->version   || '0.0',
+            maturity  => $info->maturity  || 'unknown',
+            filename  => $info->filename,
+            pauseid   => $info->cpanid    || 'unknown',
+            extension => $info->extension,
+            pathname  => $info->pathname,
+            mirror    => $self->url->server,
+            datetime  => dt2db($dt),
         };
 
     });
@@ -158,25 +151,28 @@ sub load {
     foreach my $key (sort(keys %$hash)) {
 
         push(@recs, {
-            name     => $key,
-            maturity => $hash->{$key}->{maturity},
-            mirror   => $hash->{$key}->{mirror},
-            path     => $hash->{$key}->{path},
-            datetime => $hash->{$key}->{datetime},
+            package   => $key,
+            dist      => $hash->{$key}->{'dist'},      
+            version   => $hash->{$key}->{'version'},
+            maturity  => $hash->{$key}->{'maturity'},
+            filename  => $hash->{$key}->{'filename'},
+            pauseid   => $hash->{$key}->{'pauseid'},
+            extension => $hash->{$key}->{'extension'},
+            pathname  => $hash->{$key}->{'pathname'},
+            mirror    => $hash->{$key}->{'mirror'},
+            datetime  => $hash->{$key}->{'datetime'},
         });
 
     }
 
     $schema->txn_do(sub {
 
-        Modules->populate($schema, \@datum);
         Packages->populate($schema, \@recs);
 
     });
 
     $hash  = {};
     @recs  = ();
-    @datum = ();
 
 }
 
@@ -188,29 +184,16 @@ sub clear {
         location => 'remote'
     };
 
-    Modules->delete_records($schema, $criteria);
+    Packages->delete_records($schema, $criteria);
 
 }
 
 sub count {
     my $self = shift;
-    my ($class, $location) = $self->validate_params(\@_, [
-        { optional => 1, default => 'Packages', regex => qr/Packages|Modules/ },
-        { optional => 1, default => 'local', regex => qr/remote|local|all/ },
-    ]);
 
-    my $count = 0;
     my $schema = $self->schema;
-    my $criteria = {
-        location => $location
-    };
 
-    $criteria = {} if ($location eq 'all');
-
-    $count = Packages->count($schema) if ($class eq 'Packages');
-    $count = Modules->count($schema, $criteria)  if ($class eq 'Modules');
-
-    return $count
+    return Packages->count($schema);
 
 }
 

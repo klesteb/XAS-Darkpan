@@ -4,20 +4,44 @@
     pauseid ---+
     name       |
     email      |
+    location   |
+    datetime   |
+    revison    |
                |
-[modules]      |
-    id         |
-    pauseid ---+ 
-    module      
-    version     
-    package --+     
-              | 
-[packages]    | 
-    id        | 
-    name   ---+ 
-    path        
-    mirror ---+ 
-              |
-[mirrors]     |  
-    mirror ---+    
-
+[packages]     |
+    id --------|---+     
+    package    |   |  
+    dist       |   |  
+    version    |   |
+    maturity   |   |
+    filename   |   |
+    pauseid <--+   |
+    extension      |
+    pathname       |
+    mirror <---+   |
+    datetime   |   |
+    revision   |   |
+               |   |
+[mirrors]      |   |
+    mirror ----+   |
+    type           |
+    datetime       |
+    revision       |
+                   |
+[provides]         |
+    id             |
+    package_id <---+
+    module         |
+    version        |
+    pathname       |
+    datetime       |
+    revision       |
+                   |
+[requires]         |
+    id             |
+    package_id <---+
+    module
+    version
+    datetime
+    revision
+    

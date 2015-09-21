@@ -22,7 +22,7 @@ use XAS::Class
   utils     => 'dt2db',
   vars => {
     PARAMS => {
-      -url => { isa => 'Badger::URL' },
+      -url => { optional => 1, isa => 'Badger::URL', default => Badger::URL->new('http://www.cpan.org/authors/01mailrc.txt.gz') },
     }
   }
 ;
