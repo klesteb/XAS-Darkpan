@@ -2,14 +2,15 @@ package XAS::Darkpan::Process;
 
 our $VERSION = '0.01';
 
+use PPI;
 use IO::Zlib;
 use DateTime;
+use Try::Tiny;
 use CPAN::Meta;
 use Archive::Tar;
 use XAS::Darkpan;
 use CPAN::Checksums;
 use CPAN::DistnameInfo;
-use Params::Validate 'CODEREF';
 use XAS::Darkpan::DB::Authors;
 use XAS::Darkpan::DB::Mirrors;
 use XAS::Darkpan::DB::Packages;
@@ -17,6 +18,7 @@ use XAS::Lib::Modules::Locking;
 use Archive::Zip ':ERROR_CODES';
 use Badger::Filesystem 'Dir File';
 use File::Spec::Functions qw/splitdir/;
+use Params::Validate qw/CODEREF HASHREF/;
 
 use XAS::Class
   debug      => 0,
@@ -43,7 +45,7 @@ use XAS::Class
   }
 ;
 
-#use Data::Dumper;
+use Data::Dumper;
 
 # ----------------------------------------------------------------------
 # Public Methods
@@ -57,6 +59,8 @@ sub create_dirs {
         -modules => { optional => 1, isa => 'Badger::Filesystem::Directory', default => $self->modules_path },
         -auth_id => { optional => 1, isa => 'Badger::Filesystem::Directory', default => $self->authors_id_path },
     });
+
+    $self->log->debug('entering create_dirs()');
 
     my $root       = $p->{'root'};
     my $authors    = $p->{'authors'};
@@ -77,6 +81,8 @@ sub create_dirs {
 
     }
 
+    $self->log->debug('leaving create_dirs()');
+
 }
 
 sub create_authors {
@@ -84,6 +90,8 @@ sub create_authors {
     my ($location) = $self->validate_params(\@_, [
         { optional => 1, default => 'local', regex => qr/remote|local|all/ },
     ]);
+
+    $self->log->debug('entering create_authors()');
 
     my $fh;
     my $file = File($self->authors_path, '01mailrc.txt.gz');
@@ -118,6 +126,8 @@ sub create_authors {
 
     $fh->close();
 
+    $self->log->debug('leaving create_authors()');
+
 }
 
 sub create_packages {
@@ -137,6 +147,8 @@ sub create_packages {
     my $date  = $dt->strftime('%a %b %d %H:%M:%S %Y %Z');
     my $count = $self->packages->count() + 9;
     my $path  = $mirror . '/modules/02packages.details.txt';
+
+    $self->log->debug('leaving create_packages()');
 
     unless ($fh = IO::Zlib->new($file->path, 'wb')) {
 
@@ -168,6 +180,8 @@ __HEADER
 
     $fh->close();
 
+    $self->log->debug('leaving create_packages()');
+
 }
 
 sub create_modlist {
@@ -177,6 +191,8 @@ sub create_modlist {
     my $dt = DateTime->now(time_zone => 'GMT');
     my $date = $dt->strftime('%a %b %d %H:%M:%S %Y %Z');
     my $file = File($self->modules_path, '03modlist..gz');
+
+    $self->log->debug('entering create_modlist()');
 
     unless ($fh = $file->open('w')) {
 
@@ -205,6 +221,8 @@ __MODLIST
 
     $fh->close();
 
+    $self->log->debug('leaving create_modlist()');
+
 }
 
 sub mirror {
@@ -213,15 +231,18 @@ sub mirror {
        { isa => 'Badger::Filesystem::Directory' },
     ]);
 
+    my $auth_id = 'authors/id';
     my $options = {
         order_by => 'package',
     };
+
+    $self->log->debug('entering mirror()');
 
     if (my $rs = $self->packages->search(-options => $options)) {
 
         while (my $rec = $rs->next) {
 
-            my $path = sprintf("%s/%s", $rec->mirror, $rec->pathname);
+            my $path = sprintf("%s/%s/%s", $rec->mirror, $auth_id, $rec->pathname);
             my $url  = Badger::URL->new($path);
 
             $self->inject(
@@ -234,6 +255,8 @@ sub mirror {
         }
 
     }
+
+    $self->log->debug('leaving mirror()');
 
 }
 
@@ -257,6 +280,8 @@ sub inject {
     my $lock;
     my @parts;
 
+    $self->log->debug('entering inject()');
+
     $parts[0] = $destination;
     $parts[1] = left($pauseid, 1);
     $parts[2] = left($pauseid, 2);
@@ -270,12 +295,14 @@ sub inject {
     if ($self->lockmgr->lock_directory($lock)) {
 
         $self->copy($url, $file);
-        $self->inspect_archive($file, $package_id);
+        $self->load_archive($file, $package_id);
         $self->checksum($file->directory);
 
         $self->lockmgr->unlock_directory($lock);
 
     }
+
+    $self->log->debug('leaving inject()');
 
 }
 
@@ -287,6 +314,8 @@ sub inject_author {
        -email    => 1,
        -location => { optional => 1, default => 'local', regex => qr/LOCATION/ },
     });
+
+    $self->log->debug('entering inject_author()');
 
     my $name     = $p->{'name'};
     my $email    = $p->{'email'};
@@ -300,6 +329,8 @@ sub inject_author {
         -location => $location,
     );
 
+    $self->log->debug('leaving inject_author()');
+
 }
 
 sub copy {
@@ -308,6 +339,8 @@ sub copy {
 	   { isa => 'Badger::URL' },
        { isa => 'Badger::Filesystem::File' },
     ]);
+
+    $self->log->debug('entering copy()');
 
     unless ($file->exists) {
 
@@ -319,6 +352,8 @@ sub copy {
 
     }
 
+    $self->log->debug('leaving copy()');
+
 }
 
 sub checksum {
@@ -327,29 +362,37 @@ sub checksum {
         { isa => 'Badger::Filesystem::Directory' },
     ]);
 
+    $self->log->debug('entering checksum()');
+
     $CPAN::Checksums::IGNORE_MATCH = 'locked.lck';
     CPAN::Checksums::updatedir($directory->path);
 
+    $self->log->debug('leaving checksum()');
+
 }
 
-sub inspect_archive {
+sub load_archive {
     my $self = shift;
     my ($file, $package_id) = $self->validate_params(\@_, [1,1]);
+
+    my $hash = {}; # this will be normalized
+
+    $self->log->debug('entering load_archive()');
 
     if ($file->path =~ m/TAR/i) {
 
         $self->_inspect_tar_archive(
-            -filename   => $file, 
-            -filter     => PACKAGE, 
-            -package_id => $package_id,
-            -callback   => \&_collect_package_details
+            -filename => $file, 
+            -filter   => PACKAGE, 
+            -hash     => $hash,
+            -callback => \&_collect_package_details
         );
 
         $self->_inspect_tar_archive(
-            -filename   => $file, 
-            -filter     => META, 
-            -package_id => $package_id,
-            -callback   => sub {}
+            -filename => $file, 
+            -filter   => META, 
+            -hash     => $hash,
+            -callback => \&_collect_meta_details
         );
 
     } elsif ($file->path =~ m/ZIP/i) {
@@ -357,31 +400,37 @@ sub inspect_archive {
         $self->_inspect_zip_archive(
             -filename => $file, 
             -filter   => PACKAGE, 
-            -package_id => $package_id,
+            -hash     => $hash,
             -callback => \&_collect_package_details
         );
 
         $self->_inspect_zip_archive(
-            -filename   => $file, 
-            -filter     => META, 
-            -package_id => $package_id,
-            -callback   => sub {}
+            -filename => $file, 
+            -filter   => META, 
+            -hash     => $hash,
+            -callback => \&_collect_meta_details
         );
 
     } else {
 
         $self->throw_msg(
-            dotid($self->class) . '.inspect_archive.unknownarc',
+            dotid($self->class) . '.load_archive.unknownarc',
             'unknownarc',
             $file,
         );
 
     }
 
+warn Dumper($hash);
+    
+    $self->log->debug('leaving load_archive()');
+
 }
 
 sub load_database {
     my $self = shift;
+
+    $self->log->debug('entering load_database()');
 
     $self->authors->load();
     $self->log->info('loaded authors');
@@ -392,10 +441,14 @@ sub load_database {
     $self->packages->load();
     $self->log->info('loaded packages');
 
+    $self->log->debug('leaving load_database()');
+
 }
 
 sub clear_database {
     my $self = shift;
+
+    $self->log->debug('entering clear_database()');
 
     $self->authors->clear();
     $self->log->info('cleared authors');
@@ -406,11 +459,61 @@ sub clear_database {
     $self->packages->clear();
     $self->log->info('cleared packages');
 
+    $self->log->debug('leaving clear_database()');
+
 }
 
 # ----------------------------------------------------------------------
 # Private Methods
 # ----------------------------------------------------------------------
+
+sub _load_meta {
+    my $self = shift;
+    my $content = shift; # a reference to a scalar
+
+    my $meta;
+
+    $self->log->debug('entering load_meta');
+
+    # later versions of CPAN::Meta has a load_string() method that
+    # handles this problem. But that version is not available for Debian 7.8.
+
+    try {
+
+        if ($$content =~ /^---/ ) { # looks like YAML
+
+            $self->log->debug('meta is yaml');
+            $meta = CPAN::Meta->load_yaml_string($$content);
+
+        } elsif ($$content =~ /^\s*\{/ ) { # looks like JSON
+
+            $self->log->debug('meta is json');
+            $meta = CPAN::Meta->load_json_string($$content);
+
+        } else { # maybe doc-marker-free YAML
+
+            $self->log->debug('meta is yaml');
+            $meta = CPAN::Meta->load_yaml_string($$content);
+
+        }
+
+    } catch {
+
+        my $ex = $_;
+
+        $self->throw_msg(
+            dotid($self->class) . '.load_meta.invalid',
+            'invalid_meta',
+            $ex
+        );
+
+    };
+
+    $self->log->debug('leaving load_meta');
+
+    return $meta;
+
+}
 
 sub _package_at_usual_location {   
     my $self = shift;
@@ -424,113 +527,11 @@ sub _package_at_usual_location {
 
 }
 
-sub _collect_meta_details {
-    my $self = shift;
-    my ($path, $package_id, $content) = $self->validate_params(\@_, [1,1,1]);
-
-    my $meta = CPAN::Meta->load_string($content);
-    my $prereqs = $meta->effective_prereqs();
-    
-    foreach my $provided ($prereqs->requirements_for('','')) {
-        
-    }
-
-}
-
-sub _collect_package_details {   
-    my $self = shift;
-    my ($path, $package_id, $content) = $self->validate_params(\@_, [1,1,1]);
-
-
-
-    my @lines  = split(/\r?\n/, $$content);
-    my $in_pod = 0;
-    my $package;
-
-    local $VERSION = undef;  # may get destroyed by eval
-
-    while (@lines) {
-
-        local $_ = shift @lines;
-        last if m/^__(?:END|DATA)__$/;
-
-        $in_pod = ($1 ne 'cut') if (m/^=(\w+)/);
-        next if ($in_pod || m/^\s*#/);
-
-        $_ .= shift @lines while m/package|use|VERSION/ && !m/\;/;
-
-        if ( m/^\s* package \s* ((?:\w+\:\:)*\w+) (?:\s+ (\S*))? \s* ;/x ) {
-
-            my ($thispkg, $v) = ($1, $2);
-            my $thisversion;
-
-            if ($v) {
-
-                $thisversion = eval {qv($v)};
-
-                $self->log->warn_msg('badversion', $thispkg, $v, $@) if ($@);
-
-            }
-
-            # second package in file?
-
-            $self->_register($package, $VERSION, $dist, $package_id) if (defined($package));
-
-            ($package, $VERSION) = ($thispkg, $thisversion);
-
-            $self->log->debug("pkg $package from $fn");
-
-        }
-
-        if ( m/^ (?:use\s+version\s*;\s*)?
-            (?:our)? \s* \$ ((?: \w+\:\:)*) VERSION \s* \= (.*)/x ) {
-
-            defined $2 or next;
-            my ($ns, $vers) = ($1, $2);
-
-            # some versions of CPAN.pm do contain lines like "$VERSION =~ ..."
-            # which also need to be processed.
-
-            eval "\$VERSION =$vers";
-            if (defined $VERSION) {   
-
-                ($package = $ns) =~ s/\:\:$// if (length $ns);
-
-                $self->log->debug("pkg $package version $VERSION");
-
-            }
-
-        }
-
-    }
-
-    $VERSION = $VERSION->numify if (ref($VERSION));
-    $self->_register($package, $VERSION, $dist, $package_id, $location) if defined $package;
-
-}
-
-sub _register {
-    my $self = shift;
-    my ($package, $version, $dist, $package_id, $location) = $self->validate_params(\@_, [1,1,1,1]);
-
-    my $auth_id = $self->authors_id_path;
-    ($dist) = $dist =~ /$auth_id\/(.*)/;
-
-    $self->provides->add(
-        -package_id => $package_id,
-        -module     => $package,
-        -version    => $version,
-        -pathname   => $dist,
-        -datetime   => dt2db($dt),
-    );
-
-}
-
 sub _inspect_tar_archive {
     my $self = shift;
     my $p = $self->validate_params(\@_, {
-        -package_id => 1,
-        -filename   => { isa => 'Badger::Filesystem::File' },
+        -filename => { isa => 'Badger::Filesystem::File' },
+        -hash     => { type => HASHREF },
         -filter => { callbacks => {
             'must be a compiled regex' => sub {
                     return ref(shift) eq 'Regexp';
@@ -541,10 +542,12 @@ sub _inspect_tar_archive {
     });
 
     my $arc;
+    my $hash = $p->{'hash'};
     my $filter = $p->{'filter'};
     my $archive = $p->{'filename'};
     my $callback = $p->{'callback'};
-    my $package_id = $p->{'package_id'};
+
+    $self->log->debug('entering _inspect_tar_archive()');
 
     if ($arc = Archive::Tar->new($archive->path, 1)) {
 
@@ -556,7 +559,7 @@ sub _inspect_tar_archive {
                          $path =~ m/$filter/i && 
                          $self->_package_at_usual_location($path));
 
-            $callback->($self, $path, $package_id, $file->get_content_by_ref);
+            $callback->($self, $hash, $path, $file->get_content_by_ref);
 
         }
 
@@ -570,13 +573,15 @@ sub _inspect_tar_archive {
 
     }
 
+    $self->log->debug('leaving _inspect_tar_archie()');
+
 }
 
 sub _inspect_zip_archive {
     my $self = shift;
     my $p = $self->validate_params(\@_, {
-        -package_id => 1,
-        -filename   => { isa => 'Badger::Filesystem::File' },
+        -filename => { isa => 'Badger::Filesystem::File' },
+        -hash     => { type => HASHREF },
         -filter => { callbacks => {
             'must be a compiled regex' => sub {
                     return ref(shift) eq 'Regexp';
@@ -587,10 +592,12 @@ sub _inspect_zip_archive {
     });
 
     my $arc;
+    my $hash = $p->{'hash'};
     my $filter = $p->{'filter'};
     my $archive = $p->{'filename'};
     my $callback = $p->{'callback'};
-    my $package_id = $p->{'package_id'};
+
+    $self->log->debug('entering _inspect_zip_archie()');
 
     if ($arc = Archive::Zip->new($archive->path)) {
 
@@ -612,7 +619,7 @@ sub _inspect_zip_archive {
 
             }
 
-            $callback->($self, $file, $package_id, \$contents);
+            $callback->($self, $hash, $file, \$contents);
 
         }
 
@@ -625,6 +632,259 @@ sub _inspect_zip_archive {
         );
 
     }
+
+    $self->log->debug('leaving _inspect_zip_archie()');
+
+}
+
+sub _collect_package_details {
+    my $self    = shift;
+    my $hash    = shift;
+    my $path    = shift;
+    my $content = shift;
+
+    $self->log->debug('entering _collect_package_details()');
+
+    my $package;
+    my $dom = PPI::Document->new($content, readonly => 1);
+
+    foreach my $element ($dom->elements) {
+
+        if ($element->isa('PPI::Statement::Package')) {
+
+            $package = $element->namespace;
+            $self->log->debug(sprintf('package: %s', $package));
+
+            $hash->{'provides'}->{$package}->{'pathname'} = $path;
+            $self->log->debug(sprintf('pathname: %s', $path));
+
+        } elsif ($element->isa('PPI::Statement::Variable')) {
+
+            if ($element->content =~ /VERSION/) {
+
+                my $content = $element->content;
+                my ($version) = $content =~ /VERSION\s+\=\s+(.*)/;
+
+                $self->log->debug(sprintf('version: %s', $version));
+
+                $hash->{'provides'}->{$package}->{'version'} = $version;
+
+            }
+
+        } elsif ($element->isa('PPI::Statement::Include')) {
+
+            my $module  = $element->module;
+            my $version = $element->module_version || '0.0';
+
+            next if ($element->type !~ /use|require/);
+            next if ($module =~ /strict|warnings|vars/);
+
+            $self->log->debug(sprintf('module: %s, version: %s', $module, $version));
+
+            $hash->{'requires'}->{$module}->{'phase'} = 'runtime';
+            $hash->{'requires'}->{$module}->{'version'} = $version;
+            $hash->{'requires'}->{$module}->{'relation'} = 'required';
+
+        }
+
+    }
+
+    $self->log->debug('leaving _collect_package_details()');
+
+}
+
+sub _collect_meta_details {
+    my $self      = shift;
+    my $hash     = shift;
+    my $filepath = shift;
+    my $content  = shift;
+
+    $self->log->debug('entering _collect_meta_details()');
+
+    my $meta = $self->_load_meta($content);
+    my $prereqs = $meta->effective_prereqs();
+
+    if (my $data = $prereqs->requirements_for('build','requires')) {
+
+        $self->log->debug('found build/requires');
+        my $expr = $data->as_string_hash();
+
+        while (my ($key, $value) = each($expr)) {
+
+            $hash->{'requires'}->{$key}->{'phase'} = 'build';
+            $hash->{'requires'}->{$key}->{'version'} = $value;
+            $hash->{'requires'}->{$key}->{'relation'} = 'required';
+
+        }
+
+    }
+
+    if (my $data = $prereqs->requirements_for('build','recommends')) {
+
+        $self->log->debug('found build/recommends');
+        my $expr = $data->as_string_hash();
+
+        while (my ($key, $value) = each($expr)) {
+
+            $hash->{'requires'}->{$key}->{'phase'} = 'build';
+            $hash->{'requires'}->{$key}->{'version'} = $value;
+            $hash->{'requires'}->{$key}->{'relation'} = 'recommends';
+
+        }
+
+    }
+        
+    if (my $data = $prereqs->requirements_for('build','suggests')) {
+
+        $self->log->debug('found build/suggests');
+        my $expr = $data->as_string_hash();
+
+        while (my ($key, $value) = each($expr)) {
+
+            $hash->{'requires'}->{$key}->{'phase'} = 'build';
+            $hash->{'requires'}->{$key}->{'version'} = $value;
+            $hash->{'requires'}->{$key}->{'relation'} = 'suggests';
+
+        }
+
+    }
+
+    if (my $data = $prereqs->requirements_for('build','conflicts')) {
+
+        $self->log->debug('found build/conflicts');
+        my $expr = $data->as_string_hash();
+
+        while (my ($key, $value) = each($expr)) {
+
+            $hash->{'requires'}->{$key}->{'phase'} = 'build';
+            $hash->{'requires'}->{$key}->{'version'} = $value;
+            $hash->{'requires'}->{$key}->{'relation'} = 'conflicts';
+
+        }
+
+    }
+
+    if (my $data = $prereqs->requirements_for('test','requires')) {
+
+        $self->log->debug('found test/requires');
+        my $expr = $data->as_string_hash();
+
+        while (my ($key, $value) = each($expr)) {
+
+            $hash->{'requires'}->{$key}->{'phase'} = 'test';
+            $hash->{'requires'}->{$key}->{'version'} = $value;
+            $hash->{'requires'}->{$key}->{'relation'} = 'required';
+
+        }
+
+    }
+
+    if (my $data = $prereqs->requirements_for('test','recommends')) {
+
+        $self->log->debug('found test/recommends');
+        my $expr = $data->as_string_hash();
+
+        while (my ($key, $value) = each($expr)) {
+
+            $hash->{'requires'}->{$key}->{'phase'} = 'test';
+            $hash->{'requires'}->{$key}->{'version'} = $value;
+            $hash->{'requires'}->{$key}->{'relation'} = 'recommends';
+
+        }
+
+    }
+        
+    if (my $data = $prereqs->requirements_for('test','suggests')) {
+
+        $self->log->debug('found test/suggests');
+        my $expr = $data->as_string_hash();
+
+        while (my ($key, $value) = each($expr)) {
+
+            $hash->{'requires'}->{$key}->{'phase'} = 'test';
+            $hash->{'requires'}->{$key}->{'version'} = $value;
+            $hash->{'requires'}->{$key}->{'relation'} = 'suggests';
+
+        }
+
+    }
+
+    if (my $data = $prereqs->requirements_for('test','conflicts')) {
+
+        $self->log->debug('found test/conflicts');
+        my $expr = $data->as_string_hash();
+
+        while (my ($key, $value) = each($expr)) {
+
+            $hash->{'requires'}->{$key}->{'phase'} = 'test';
+            $hash->{'requires'}->{$key}->{'version'} = $value;
+            $hash->{'requires'}->{$key}->{'relation'} = 'conflicts';
+
+        }
+
+    }
+
+    if (my $data = $prereqs->requirements_for('runtime','requires')) {
+
+        $self->log->debug('found runtime/requires');
+        my $expr = $data->as_string_hash();
+
+        while (my ($key, $value) = each($expr)) {
+
+            $hash->{'requires'}->{$key}->{'phase'} = 'runtime';
+            $hash->{'requires'}->{$key}->{'version'} = $value;
+            $hash->{'requires'}->{$key}->{'relation'} = 'required';
+
+        }
+
+    }
+
+    if (my $data = $prereqs->requirements_for('runtime','recommends')) {
+
+        $self->log->debug('found runtime/recommends');
+        my $expr = $data->as_string_hash();
+
+        while (my ($key, $value) = each($expr)) {
+
+            $hash->{'requires'}->{$key}->{'phase'} = 'runtime';
+            $hash->{'requires'}->{$key}->{'version'} = $value;
+            $hash->{'requires'}->{$key}->{'relation'} = 'recommends';
+
+        }
+
+    }
+        
+    if (my $data = $prereqs->requirements_for('runtime','suggests')) {
+
+        $self->log->debug('found runtime/suggests');
+        my $expr = $data->as_string_hash();
+
+        while (my ($key, $value) = each($expr)) {
+
+            $hash->{'requires'}->{$key}->{'phase'} = 'runtime';
+            $hash->{'requires'}->{$key}->{'version'} = $value;
+            $hash->{'requires'}->{$key}->{'relation'} = 'suggests';
+
+        }
+
+    }
+
+    if (my $data = $prereqs->requirements_for('runtime','conflicts')) {
+
+        $self->log->debug('found runtime/conflicts');
+        my $expr = $data->as_string_hash();
+
+        while (my ($key, $value) = each($expr)) {
+
+            $hash->{'requires'}->{$key}->{'phase'} = 'runtime';
+            $hash->{'requires'}->{$key}->{'version'} = $value;
+            $hash->{'requires'}->{$key}->{'relation'} = 'conflicts';
+
+        }
+
+    }
+
+    $self->log->debug('leaving _collect_meta_details()');
 
 }
 
