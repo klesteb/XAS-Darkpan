@@ -9,7 +9,7 @@ use Params::Validate 'CODEREF';
 use XAS::Class
   debug     => 0,
   version   => $VERSION,
-  base      => 'XAS::Darkpan::Base',
+  base      => 'XAS::Darkpan::Parse::Base',
   accessors => 'data',
   codec     => 'JSON',
   vars => {
