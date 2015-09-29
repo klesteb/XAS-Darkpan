@@ -460,16 +460,7 @@ sub _collect_package_details {
 
         $package = $xpackage;
 
-        if (defined($version)) {
-
-            $hash->{'provides'}->{$package}->{'version'} = $version;
-
-        } else {
-
-            $hash->{'provides'}->{$package}->{'version'} = 'undef';
-
-        }
-
+        $hash->{'provides'}->{$package}->{'version'} = $version;
         $hash->{'provides'}->{$package}->{'pathname'} = $path;
 
     };
