@@ -2,48 +2,44 @@ package XAS::Darkpan::Process;
 
 our $VERSION = '0.01';
 
-use XAS::Darkpan::DB::Mirrors;
+use Badger::URL;
+use Badger::Filesystem 'Dir';
+use XAS::Lib::Modules::Locking;
+use XAS::Darkpan::Process::Authors;
+use XAS::Darkpan::Process::Mirrors;
+use XAS::Darkpan::Process::Modlist;
+use XAS::Darkpan::Process::Packages;
 
 use XAS::Class
   debug     => 0,
   version   => $VERSION,
   base      => 'XAS::Darkpan::Base',
   accessors => 'packages authors mirrors lockmgr',
-  utils     => 'dotid left mid',
+  utils     => 'dotid',
   vars => {
     PARAMS => {
-      -schema          => 1,
-      -root_path       => { optional => 1, isa => 'Badger::Filesystem::Directory', default => Dir('/srv/dpan') },
-      -modules_path    => { optional => 1, isa => 'Badger::Filesystem::Directory', default => Dir('/srv/dpan/modules') },
-      -authors_id_path => { optional => 1, isa => 'Badger::Filesystem::Directory', default => Dir('/srv/dpan/authors/id') },
-      -mirror_url      => { optional => 1, isa => 'Badger::URL', default => Badger::URL->new('http://www.cpan.org') },
+      -schema => 1,
+      -root   => { optional => 1, isa => 'Badger::Filesystem::Directory', default => Dir('/srv/dpan') },
+      -mirror => { optional => 1, isa => 'Badger::URL', default => Badger::URL->new('http://www.cpan.org') },
     }
   }
 ;
 
-use PPI::Dumper;
-use Data::Dumper;
-
+#use Data::Dumper;
 
 # ----------------------------------------------------------------------
 # Public Methods
 # ----------------------------------------------------------------------
 
-sub create_dirs {
+sub create {
     my $self = shift;
-    my $p = $self->validate_params(\@_, {
-        -root    => { optional => 1, isa => 'Badger::Filesystem::Directory', default => $self->root_path },
-        -authors => { optional => 1, isa => 'Badger::Filesystem::Directory', default => $self->authors_path },
-        -modules => { optional => 1, isa => 'Badger::Filesystem::Directory', default => $self->modules_path },
-        -auth_id => { optional => 1, isa => 'Badger::Filesystem::Directory', default => $self->authors_id_path },
-    });
 
-    $self->log->debug('entering create_dirs()');
+    $self->log->debug('entering create()');
 
-    my $root       = $p->{'root'};
-    my $authors    = $p->{'authors'};
-    my $modules    = $p->{'modules'};
-    my $authors_id = $p->{'auth_id'};
+    my $root       = $self->root->path;
+    my $authors    = Dir($root, 'authors');
+    my $modules    = Dir($root, 'modules');
+    my $authors_id = Dir($root, 'authors/id');
 
     my @dirs = qw(A B C D E F G H I J K L M N O P Q R S T U V W X Y Z);
 
@@ -59,72 +55,48 @@ sub create_dirs {
 
     }
 
-    $self->log->debug('leaving create_dirs()');
+    $self->log->debug('leaving create()');
 
 }
 
-sub create_modlist {
+sub inject {
     my $self = shift;
+    my $p = $self->validate_params(\@_, {
+        -pauseid => 1,
+        -email   => 1,
+        -name    => 1,
+        -package => 1,
+        -mirror  => { isa => 'Badger::URL' },
+    });
 
-    my $fh;
-    my $dt = DateTime->now(time_zone => 'GMT');
-    my $date = $dt->strftime('%a %b %d %H:%M:%S %Y %Z');
-    my $file = File($self->modules_path, '03modlist..gz');
-
-    $self->log->debug('entering create_modlist()');
-
-    unless ($fh = $file->open('w')) {
-
-        $self->throw_msg(
-            dotid($self->class) . '.create_packages.nocreate',
-            'nocreate',
-            $file->path
-        );
-
-    }
-
-    $fh->print (<<__MODLIST);
-File:        03modlist.data
-Description: This was once the "registered module list" but has been retired.
-        No replacement is planned.
-Modcount:    0
-Written-By:  XAS Darkpan $XAS::Darkpan::VERSION
-Date:        $date
-
-package CPAN::Modulelist;
-sub data {
-return {};
-}
-1;
-__MODLIST
-
-    $fh->close();
-
-    $self->log->debug('leaving create_modlist()');
+    my $pauseid = $p->{'pauseid'};
+    my $package = $p->{'package'};
+    my $email   = $p->{'email'};
+    my $mirror  = $p->{'mirror'};
 
 }
 
 sub mirror {
     my $self = shift;
-    my ($destination) = $self->validate_params(\@_, [
-       { isa => 'Badger::Filesystem::Directory' },
-    ]);
 
+    my $root = $self->root->path;
     my $auth_id = 'authors/id';
+    my $destination = Dir($root, $auth_id);
+
     my $options = {
         order_by => 'package',
     };
 
     $self->log->debug('entering mirror()');
 
-    if (my $rs = $self->packages->search(-options => $options)) {
+    if (my $rs = $self->packages->database->search(-options => $options)) {
 
         while (my $rec = $rs->next) {
 
             my $path = sprintf("%s/%s/%s", $rec->mirror, $auth_id, $rec->pathname);
             my $url  = Badger::URL->new($path);
 
-            $self->inject(
+            $self->packages->inject(
                 -url         => $url,
                 -pauseid     => $rec->pauseid,
                 -package_id  => $rec->id,
@@ -145,13 +117,8 @@ sub load_database {
     $self->log->debug('entering load_database()');
 
     $self->authors->load();
-    $self->log->info('loaded authors');
-
     $self->mirrors->load();
-    $self->log->info('loaded mirrors');
-
     $self->packages->load();
-    $self->log->info('loaded packages');
 
     $self->log->debug('leaving load_database()');
 
@@ -163,13 +130,8 @@ sub clear_database {
     $self->log->debug('entering clear_database()');
 
     $self->authors->clear();
-    $self->log->info('cleared authors');
-
     $self->mirrors->clear();
-    $self->log->info('cleared mirrors');
-
     $self->packages->clear();
-    $self->log->info('cleared packages');
 
     $self->log->debug('leaving clear_database()');
 
@@ -179,23 +141,34 @@ sub clear_database {
 # Private Methods
 # ----------------------------------------------------------------------
 
-
 sub init {
     my $class = shift;
 
     my $self = $class->SUPER::init(@_);
+    my $root = $self->root;
 
-    my $mirrors  = $self->mirror_url->copy();
+    $self->{'lockmgr'} = XAS::Lib::Modules::Locking->new();
 
-
-    $mirrors->path('/modules/07mirror.json');
-
-    $self->{mirrors} = XAS::Darkpan::DB::Mirrors->new(
-        -schema => $self->schema,
-        -url    => $mirrors,
+    $self->{'authors'} = XAS::Darkpan::Process::Authors->new(
+        -schmea  => $self->schema,
+        -lockmgr => $self->lockmgr,
+        -path    => Dir($root, 'authors'),
+        -mirror  => $self->mirror->copy()
     );
 
-    $self->{lockmgr} = XAS::Lib::Modules::Locking->new();
+    $self->{'mirrors'} = XAS::Darkpan::Process::Mirrors->new(
+        -schmea  => $self->schema,
+        -lockmgr => $self->lockmgr,
+        -path    => Dir($root, 'modules'),
+        -mirror  => $self->mirror->copy()
+    );
+
+    $self->{'packages'} = XAS::Darkpan::Process::Packages->new(
+        -schmea  => $self->schema,
+        -lockmgr => $self->lockmgr,
+        -path    => Dir($root, 'authors/id'),
+        -mirror  => $self->mirror->copy()
+    );
 
     return $self;
 

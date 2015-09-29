@@ -45,16 +45,16 @@ sub remove {
 
 sub add {
     my $self = shift;
-    my ($mirror, $type) = $self->validate_params(\@, [
-        1,
-        { optional => 1, default => 'remote' }
-    ]);
+    my $p = $self->validate_params(\@_, {
+        -mirror => 1,
+        -type   => 1,
+    });
 
     my $schema = $self->schema;
     my $dt = DateTime->now(time_zone => 'local');
     my $rec = {
-        mirror   => $mirror,
-        type     => $type,
+        mirror   => $p->{'mirror'},
+        type     => $p->{'type'},
         datetime => dt2db($dt),
     };
 
@@ -64,6 +64,10 @@ sub add {
 
 sub data {
     my $self = shift;
+    my $p = $self->validate_params(\@_, {
+       -criteria => { optional => 1, type => HASHREF, default => { type => { '!=', 'master' } } },
+       -options  => { optional => 1, type => HASHREF, default => {} },
+    });
 
     my $schema = $self->schema;
     my $json   = JSON::XS->new->pretty->utf8();
@@ -77,7 +81,7 @@ sub data {
         name      => 'Comprehensive Perl Archive Network',
     };
 
-    if (my $rs = Mirrors->search($schema, { type => { '!=', 'master' }})) {
+    if (my $rs = Mirrors->search($schema, $p->{'criteria'}, $p->{'options'})) {
 
         while (my $rec = $rs->next) {
 
@@ -93,14 +97,14 @@ sub data {
 
 sub search {
     my $self = shift;
-    my ($criteria, $options) = $self->validate_params(\@_, [
-        { optional => 1, default => {}, type => HASHREF },
-        { optional => 1, default => {}, type => HASHREF },
-    ]);
+    my $p = $self->validate_params(\@_, {
+        -criteria => { optional => 1, default => {}, type => HASHREF },
+        -options  => { optional => 1, default => {}, type => HASHREF },
+    });
 
     my $schema = $self->schema;
 
-    return Mirrors->search($schema, $criteria, $options);
+    return Mirrors->search($schema, $p->{'criteria'}, $p->{'options'});
 
 }
 
@@ -130,30 +134,25 @@ sub load {
 
 sub clear {
     my $self = shift;
+    my $p = $self->validate_params(\@_, {
+        -criteria => { optional => 1, default => {}, type => HASHREF },
+    });
 
     my $schema = $self->schema;
-    my $criteria = {
-        type => ['master', 'mirror']
-    };
 
-    Mirrors->delete_records($schema, $criteria);
+    Mirrors->delete_records($schema, $p->{'criteria'});
 
 }
 
 sub count {
     my $self = shift;
-    my ($location) = $self->validate_params(\@_, [
-        { optional => 1, default => 'local', regex => qr/remote|local|all/ },
-    ]);
+    my $p = $self->validate_params(\@_, {
+        -criteria => { optional => 1, default => {}, type => HASHREF },
+    });
 
     my $schema = $self->schema;
-    my $criteria = {
-        location => $location
-    };
 
-    $criteria = {} if ($location eq 'all');
-
-    return Mirrors->count($schema, $criteria);
+    return Mirrors->count($schema, $p->{'criteria'});
 
 }
 

@@ -45,7 +45,12 @@ __PACKAGE__->optimistic_locking_version_column('revision');
 
 __PACKAGE__->belongs_to( 
     packages => 'XAS::Model::Database::Darkpan::Result::Packages', 
-    { 'foreign.mirror' => 'self.mirror' } 
+    { 'foreign.mirror' => 'self.mirror' },
+);
+
+__PACKAGE__->belongs_to( 
+    authors => 'XAS::Model::Database::Darkpan::Result::Authors',
+    { 'foreign.mirror' => 'self.mirror' },
 );
 
 sub sqlt_deploy_hook {

@@ -12,7 +12,7 @@ use Badger::URL;
 use CPAN::DistnameInfo;
 use Badger::Filesystem 'File';
 use Params::Validate 'HASHREF';
-use XAS::Lib::Darkpan::Package;
+use XAS::Darkpan::Lib::Package;
 use XAS::Darkpan::Parse::Packages;
 
 use XAS::Class
@@ -33,18 +33,31 @@ use XAS::Class
 # Public Methods
 # ----------------------------------------------------------------------
 
+sub remove {
+    my $self = shift;
+    my ($package, $version) = $self->validate_params(\@_, [1,1]);
+
+    my $schema = $self->schema;
+    my $criteria = {
+        package => $package,
+        version => $version,
+    };
+
+    Packages->delete_records($schema, $criteria);
+
+}
+
 sub add {
     my $self = shift;
     my $p = $self->validate_params(\@_, {
-       -path     => 1,
-       -mirror   => { optional => 1, default => $self->url->server },
-       -location => { optional => 1, default => 'remote', regex => qr/remote|local/ },
+       -path   => 1,
+       -mirror => 1,
     });
 
     my $criteria;
     my $schema = $self->schema;
     my $dt = DateTime->now(time_zone => 'local');
-    my $info = CPAN::DistnameInfo->new($p->{path});
+    my $info = CPAN::DistnameInfo->new($p->{'path'});
     my ($package) = $info->dist =~ s/-/::/;
 
     my $data = {      
@@ -65,19 +78,6 @@ sub add {
         Packages->create($schema, $data); 
 
     });
-
-}
-
-sub search {
-    my $self = shift;
-    my $p = $self->validate_params(\@_, {
-       -criteria => { optional => 1, type => HASHREF, default => {} },
-       -options  => { optional => 1, type => HASHREF, default => {} },
-    });
-
-    my $schema = $self->schema;
-
-    return Packages->search($schema, $p->{'criteria'}, $p->{'options'});
 
 }
 
@@ -106,6 +106,19 @@ sub data {
     }
 
     return wantarray ? @datum : \@datum;
+
+}
+
+sub search {
+    my $self = shift;
+    my $p = $self->validate_params(\@_, {
+       -criteria => { optional => 1, type => HASHREF, default => {} },
+       -options  => { optional => 1, type => HASHREF, default => {} },
+    });
+
+    my $schema = $self->schema;
+
+    return Packages->search($schema, $p->{'criteria'}, $p->{'options'});
 
 }
 
@@ -178,22 +191,25 @@ sub load {
 
 sub clear {
     my $self = shift;
+    my $p = $self->validate_params(\@_, {
+        -criteria => { optional => 1, default => {}, type => HASHREF },
+    });
 
     my $schema = $self->schema;
-    my $criteria = {
-        location => 'remote'
-    };
 
-    Packages->delete_records($schema, $criteria);
+    Packages->delete_records($schema, $p->{'criteria'});
 
 }
 
 sub count {
     my $self = shift;
+    my $p = $self->validate_params(\@_, {
+        -criteria => { optional => 1, default => {}, type => HASHREF },
+    });
 
     my $schema = $self->schema;
 
-    return Packages->count($schema);
+    return Packages->count($schema, $p->{'criteria'});
 
 }
 

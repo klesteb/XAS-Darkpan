@@ -1,10 +1,10 @@
-package XAS::Darkpan::Process::Authors;
+package XAS::Darkpan::Process::Mirrors;
 
 our $VERSION = '0.01';
 
 use IO::Zlib;
 use Badger::URL;
-use XAS::Darkpan::DB::Authors;
+use XAS::Darkpan::DB::Mirrors;
 use Badger::Filesystem 'Dir File';
 
 use XAS::Class
@@ -12,10 +12,10 @@ use XAS::Class
   version   => $VERSION,
   base      => 'XAS::Darkpan::Process::Base',
   utils     => 'dotid',
-  accessors => 'database',
+  codec     => 'JSON',
   vars => {
     PARAMS => {
-      -path => { optional => 1, isa => 'Badger::Filesystem::Directory', default => Dir('/srv/dpan/authors') },
+      -path => { optional => 1, isa => 'Badger::Filesystem::Directory', default => Dir('/srv/dpan/modules/07mirrors.json') },
     }
   }
 ;
@@ -26,18 +26,12 @@ use XAS::Class
 
 sub create {
     my $self = shift;
-    my ($mirror) = $self->validate_params(\@_, [
-        { optional => 1, default => $self->mirror, isa => 'Badger::URL' },
-    ]);
 
     $self->log->debug('entering create()');
 
     my $fh;
     my $file = File($self->path, '01mailrc.txt.gz');
-    my $authors = $self->database->data(
-        -criteria => { mirror => $mirror },
-        -options  => { order_by => 'pauseid' },
-    );
+    my $mirrors = $self->database->data();
 
     if ($self->lockmgr->lock_directory($self->path)) {
 
@@ -47,17 +41,13 @@ sub create {
                 dotid($self->class) . '.create.nocreate',
                 'nocreate',
                 $file->path
-            );
+             );
 
         }
 
-        foreach my $author (@$authors) {
-
-            $fh->printf("%s\n", $author->to_string);
-
-        }
-
+        $fh->write($mirrors);
         $fh->close();
+
         $self->lockmgr->unlock_directory($self->root);
 
     } else {
@@ -65,7 +55,7 @@ sub create {
         $self->throw_msg(
             dotid($self->class) . '.create.nolock',
             'lock_dir_error',
-            $self->file->path
+            $self->path->path
         );
 
     }
@@ -77,27 +67,53 @@ sub create {
 sub inject {
     my $self = shift;
     my $p = $self->validate_params(\@_, {
-       -pauseid  => 1,
-       -name     => 1,
-       -email    => 1,
-       -mirror   => { optional => 1, default => $self->mirror, isa => 'Badger::URL' },
+        -url  => { isa => 'Badger::URL' },
+        -type => { optional => default => 'mirror', regex => qr/master|mirror/ },
     });
 
-    $self->log->debug('entering inject()');
-
-    my $name    = $p->{'name'};
-    my $email   = $p->{'email'};
-    my $pauseid = $p->{'pauseid'};
-    my $mirror  = $p->{'mirror'};
-
     $self->database->add(
-        -name    => $name,
-        -email   => $email,
-        -pauseid => $pauseid,
-        -mirror  => $mirror,
+        -mirror => $p->{'url'}->service,
+        -type   => $p->{'type'},
     );
 
-    $self->log->debug('leaving inject()');
+}
+
+sub load {
+  my $self = shift;
+
+    $self->database->load(@_);
+    $self->log->info('loaded mirrors');
+
+}
+
+sub clear {
+    my $self = shift;
+
+    $self->database->clear(@_);
+    $self->log->info('cleared mirrors');
+
+}
+
+sub reload {
+    my $self = shift;
+
+    $self->database->clear(@_);
+    $self->database->load(@_);
+    $self->log->info('reloaded mirrors');
+
+}
+
+sub data {
+    my $self = shift;
+
+    return $self->database->data(@_);
+
+}
+
+sub search {
+    my $self = shift;
+
+    return $self->database->search(@_);
 
 }
 
@@ -109,13 +125,13 @@ sub init {
     my $class = shift;
 
     my $self = $class->SUPER::init(@_);
-    my $authors = $self->mirror->copy();
+    my $mirrors = $self->mirror->copy();
 
-    $authors->path('/authors/01mailrc.txt.gz');
+    $mirrors->path('/modules/07mirror.json');
 
-    $self->{database} = XAS::Darkpan::DB::Authors->new(
+    $self->{'database'} = XAS::Darkpan::DB::Mirrors->new(
         -schema => $self->schema,
-        -url    => $authors,
+        -url    => $mirrors,
     );
 
     return $self;

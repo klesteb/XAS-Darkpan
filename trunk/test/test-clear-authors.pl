@@ -4,11 +4,14 @@ use strict;
 use warnings;
 
 use XAS::Model::Schema;
-use XAS::Darkpan::DB::Authors;
+use XAS::Lib::Modules::Locking;
+use XAS::Darkpan::Process::Authors;
 
+my $lockmgr = XAS::Lib::Modules::Locking->new();
 my $schema = XAS::Model::Schema->opendb('darkpan');
-my $authors = XAS::Darkpan::DB::Authors->new(
-    -schema => $schema
+my $authors = XAS::Darkpan::Process::Authors->new(
+    -schema  => $schema,
+    -lockmgr => $lockmgr,
 );
 
 $authors->clear();

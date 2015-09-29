@@ -4,7 +4,6 @@
     pauseid ---+
     name       |
     email      |
-    location   |
     datetime   |
     revison    |
                |

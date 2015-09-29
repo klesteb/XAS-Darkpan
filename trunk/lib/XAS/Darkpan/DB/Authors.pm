@@ -11,7 +11,7 @@ use DateTime;
 use Badger::URL;
 use Badger::Filesystem 'File';
 use Params::Validate 'HASHREF';
-use XAS::Lib::Darkpan::Author;
+use XAS::Darkpan::Lib::Author;
 use XAS::Darkpan::Parse::Authors;
 
 use XAS::Class
@@ -27,7 +27,7 @@ use XAS::Class
   }
 ;
 
-use Data::Dumper;
+#use Data::Dumper;
 
 # ----------------------------------------------------------------------
 # Public Methods
@@ -49,10 +49,9 @@ sub remove {
 sub add {
     my $self = shift;
     my $p = $self->validate_params(\@_, {
-        -pauseid  => 1,
-        -name     => 1,
-        -email    => 1,
-        -location => { regex => qr/remote|local/ },
+        -pauseid => 1,
+        -name    => 1,
+        -email   => 1,
     });
 
     my $schema = $self->schema;
@@ -66,19 +65,19 @@ sub add {
 
 sub data {
     my $self = shift;
+    my $p = $self->validate_params(\@_, {
+       -criteria => { optional => 1, type => HASHREF, default => {} },
+       -options  => { optional => 1, type => HASHREF, default => { order_by => 'pauseid' } },
+    });
 
     my @datum = ();
-    my $criteria = {};
-    my $options = {
-        order_by => 'pauseid'
-    };
     my $schema = $self->schema;
 
-    if (my $rs = Authors->search($schema, $criteria, $options)) {
+    if (my $rs = Authors->search($schema, $p->{'criteria'}, $p->{'options'})) {
 
         while (my $rec = $rs->next) {
 
-            push(@datum, XAS::Lib::Darkpan::Author->new(
+            push(@datum, XAS::Darkpan::Lib::Author->new(
                 -pauseid => $rec->pauseid,
                 -name    => $rec->name,
                 -email   => $rec->email,
@@ -94,14 +93,14 @@ sub data {
 
 sub search {
     my $self = shift;
-    my ($criteria, $options) = $self->validate_params(\@_, [
-        { optional => 1, default => {}, type => HASHREF },
-        { optional => 1, default => {}, type => HASHREF},
-    ]);
+    my $p = $self->validate_params(\@_, {
+        -criteria => { optional => 1, default => {}, type => HASHREF },
+        -options  => { optional => 1, default => {}, type => HASHREF},
+    });
 
     my $schema = $self->schema;
 
-    return Authors->search($schema, $criteria, $options);
+    return Authors->search($schema, $p->{'criteria'}, $p->{'options'});
 
 }
 
@@ -132,30 +131,25 @@ sub load {
 
 sub clear {
     my $self = shift;
+    my $p = $self->validate_params(\@_, {
+        -criteria => { optional => 1, default => {}, type => HASHREF },
+    });
 
     my $schema = $self->schema;
-    my $criteria = {
-        locataion => 'remote'
-    };
 
-    Authors->delete_records($schema, $criteria);
+    Authors->delete_records($schema, $p->{'criteria'});
 
 }
 
 sub count {
     my $self = shift;
-    my ($location) = $self->validate_params(\@_, [
-        { optional => 1, default => 'local', regex => qr/remote|local|all/ },
-    ]);
+    my $p = $self->validate_params(\@_, {
+        -criteria => { optional => 1, default => {}, type => HASHREF },
+    });
 
     my $schema = $self->schema;
-    my $criteria = {
-        location => $location
-    };
 
-    $criteria = {} if ($location eq 'all');
-
-    return Authors->count($schema, $criteria);
+    return Authors->count($schema, $p->{'criteria'});
 
 }
 

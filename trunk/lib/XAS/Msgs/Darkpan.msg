@@ -16,3 +16,5 @@ unknownarc   = unknown archive type: %s
 badrequest   = a bad request was made to: %s, reasom: %s
 processed    = processed: %s
 invalid_meta = the meta file is invalid, reason: %s
+nocreate     = unable to create %s
+

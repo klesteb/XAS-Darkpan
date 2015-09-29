@@ -11,22 +11,20 @@ use XAS::Darkpan;
 use CPAN::Checksums;
 use CPAN::DistnameInfo;
 use XAS::Darkpan::DB::Packages;
-use XAS::Lib::Darkpan::Packages;
+use XAS::Darkpan::Lib::Package;
 use Archive::Zip ':ERROR_CODES';
 use Badger::Filesystem 'Dir File';
-use File::Spec::Functions qw/splitdir catfile/;
 use Params::Validate qw/CODEREF HASHREF/;
+use File::Spec::Functions qw/splitdir catfile/;
 
 use XAS::Class
-  debug   => 0,
-  version => $VERSION,
-  base    => 'XAS::Base',
+  debug     => 0,
+  version   => $VERSION,
+  base      => 'XAS::Darkpan::Process::Base',
+  utils     => 'dotid left',
   vars => {
     PARAMS => {
-      -schema  => 1,
-      -lockmgr => 1,
-      -path    => { optional => 1, isa => 'Badger::Filesystem::Directory', default => Dir('/srv/dpan/authors/id') },
-      -mirror  => { optional => 1, isa => 'Badger::URL', default => Badger::Url->new('http://www.cpan.org') },
+      -path => { optional => 1, isa => 'Badger::Filesystem::Directory', default => Dir('/srv/dpan/authors/id') },
     }
   }
 ;
@@ -40,9 +38,9 @@ my $META     = qr/META\.json$|META\.yml$|META\.yaml$/;
 my $TAR      = qr/\.tar\.gz$|\.tar\.Z$|\.tgz$/;
 my $ZIP      = qr/\.zip$/;
 my $LOCATION = qr/remote|local/;
-my $USE      = qr/use|require/;
-my $USELESS  = qr/strict|warnings|vars|re|aliased|version|constant/;
 my $xVERSION = qr/\$(?:\w+::)*VERSION/;
+my $xISA     = qr/\@ISA/;
+my $PRAGMAS  = qr/constant|diagnostics|integer|sigtrap|strict|subs|warnings|sort/;
 
 # ----------------------------------------------------------------------
 # Public Methods
@@ -50,9 +48,8 @@ my $xVERSION = qr/\$(?:\w+::)*VERSION/;
 
 sub create {
     my $self = shift;
-    my ($mirror, $location) = $self->validate_params(\@_, [
+    my ($mirror) = $self->validate_params(\@_, [
         { optional => 1, default => $self->mirror, isa => 'Badger::URL' },
-        { optional => 1, default => 'local', regex => qr/remote|local|all/ },
     ]);
 
     my $fh;
@@ -60,25 +57,27 @@ sub create {
     my $program = $self->env->script;
     my $dt = DateTime->now(time_zone => 'GMT');
     my $file = File($self->path, '02packages.details.txt.gz');
-    my $packages = $self->packages->data(-criteria => { location => $location });
+    my $packages = $self->database->data(-criteria => { mirror => $mirror });
 
     my $date  = $dt->strftime('%a %b %d %H:%M:%S %Y %Z');
-    my $count = $self->packages->count() + 9;
+    my $count = $self->database->count() + 9;
     my $path  = $mirror . '/modules/02packages.details.txt';
 
     $self->log->debug('leaving create_packages()');
 
-    unless ($fh = IO::Zlib->new($file->path, 'wb')) {
+    if ($self->lockmgr->lock_directory($self->path)) {
 
-        $self->throw_msg(
-            dotid($self->class) . '.create_packages.nocreate',
-            'nocreate',
-            $file->path
-        );
+        unless ($fh = IO::Zlib->new($file->path, 'wb')) {
 
-    }
+            $self->throw_msg(
+                dotid($self->class) . '.create_packages.nocreate',
+                'nocreate',
+                $file->path
+            );
 
-    $fh->print (<<__HEADER);
+        }
+
+        $fh->print (<<__HEADER);
 File:         02packages.details.txt
 URL:          $path
 Description:  Packages listed in CPAN and local repository
@@ -90,31 +89,55 @@ Last-Updated: $date
 
 __HEADER
 
-    foreach my $package (@$packages) {
+        foreach my $package (@$packages) {
 
-        $fh->printf("%s\n", $package->to_string);
+            $fh->printf("%s\n", $package->to_string);
+
+        }
+
+        $fh->close();
+
+        $self->lockmgr->unlock_directory($self->path);
+
+    } else {
+
+        $self->throw_msg(
+            dotid($self->class) . '.create.nolock',
+            'lock_dir_error',
+            $self->path->path
+        );
 
     }
 
-    $fh->close();
-
-    $self->log->debug('leaving create_packages()');
+    $self->log->debug('leaving create()');
 
 }
 
 sub inject {
     my $self = shift;
     my $p = $self->validate_params(\@_, {
+        -path   => 1,
+        -mirror => { optional => 1, isa => 'Badger::URL', default => $self->mirror },
+    });
+
+    $self->database->add(
+        -path   => $p->{'path'},
+        -mirror => $p->{'mirror'}->service,
+    );
+
+}
+
+sub process {
+    my $self = shift;
+    my $p = $self->validate_params(\@_, {
        -pauseid     => 1,
        -package_id  => 1,
 	   -url         => { isa => 'Badger::URL', },
        -destination => { isa => 'Badger::Filesystem::Directory' },
-       -location    => { optional => 1, default => 'local', regex => $LOCATION },
     });
 
     my $url         = $p->{'url'};
     my $pauseid     = $p->{'pauseid'};
-    my $location    = $p->{'location'};
     my $package_id  = $p->{'package_id'};
     my $destination = $p->{'destination'};
 
@@ -150,11 +173,43 @@ sub inject {
 
 sub load {
     my $self = shift;
-    
-    $self->packages->load();
+
+    $self->database->load(@_);
     $self->log->info('loaded packages');
 
 }
+
+sub reload {
+    my $self = shift;
+
+    $self->database->clear(@_);
+    $self->database->load(@_);
+    $self->log->info('reloaded packages');
+
+}
+
+sub clear {
+    my $self = shift;
+
+    $self->database->clear(@_);
+    $self->log->info('cleared packages');
+
+}
+
+sub data {
+    my $self = shift;
+
+    return $self->database->data(@_);
+
+}
+
+sub search {
+    my $self = shift;
+
+    return $self->database->search(@_);
+
+}
+
 
 # ----------------------------------------------------------------------
 # Private Methods
@@ -167,7 +222,7 @@ sub _copy_archive {
        { isa => 'Badger::Filesystem::File' },
     ]);
 
-    $self->log->debug('entering copy_archive()');
+    $self->log->debug('entering _copy_archive()');
     $self->log->debug('copying '. $url);
 
     unless ($file->exists) {
@@ -180,7 +235,7 @@ sub _copy_archive {
 
     }
 
-    $self->log->debug('leaving copy_archive()');
+    $self->log->debug('leaving _copy_archive()');
 
 }
 
@@ -190,9 +245,9 @@ sub _load_archive {
 
     my $hash = {}; # this will be normalized
 
-    $self->log->debug('entering load_archive()');
+    $self->log->debug('entering _load_archive()');
 
-    if ($file->path =~ TAR) {
+    if ($file->path =~ $TAR) {
 
         $self->_inspect_tar_archive(
             -filename => $file, 
@@ -208,7 +263,7 @@ sub _load_archive {
             -callback => \&_collect_meta_details
         );
 
-    } elsif ($file->path =~ ZIP) {
+    } elsif ($file->path =~ $ZIP) {
 
         $self->_inspect_zip_archive(
             -filename => $file, 
@@ -236,7 +291,7 @@ sub _load_archive {
 
 warn Dumper($hash);
     
-    $self->log->debug('leaving load_archive()');
+    $self->log->debug('leaving _load_archive()');
 
 }
 
@@ -246,12 +301,12 @@ sub _checksum {
         { isa => 'Badger::Filesystem::Directory' },
     ]);
 
-    $self->log->debug('entering checksum()');
+    $self->log->debug('entering _checksum()');
 
     $CPAN::Checksums::IGNORE_MATCH = 'locked.lck';
     CPAN::Checksums::updatedir($directory->path);
 
-    $self->log->debug('leaving checksum()');
+    $self->log->debug('leaving _checksum()');
 
 }
 
@@ -261,9 +316,9 @@ sub _load_meta {
 
     my $meta;
 
-    $self->log->debug('entering load_meta');
+    $self->log->debug('entering _load_meta');
 
-    # later versions of CPAN::Meta has=ve a load_string() method that
+    # later versions of CPAN::Meta has a load_string() method that
     # handles this problem. But that version is not available for Debian 7.8.
 
     try {
@@ -297,7 +352,7 @@ sub _load_meta {
 
     };
 
-    $self->log->debug('leaving load_meta');
+    $self->log->debug('leaving _load_meta');
 
     return $meta;
 
@@ -435,21 +490,28 @@ sub _collect_package_details {
     $self->log->debug('entering _collect_package_details()');
 
     my $package;
-    my $dom = PPI::Document->new($content, readonly => 1);
 
-    my $build_requires = sub {
-        my $module = shift;
+    my $process_package = sub {
+        my $xpackage = shift;
         my $version = shift;
 
-        $hash->{'requires'}->{$module}->{'phase'} = 'runtime';
-        $hash->{'requires'}->{$module}->{'version'} = $version;
-        $hash->{'requires'}->{$module}->{'relation'} = 'required';
+        $package = $xpackage;
 
-        $self->log->debug(sprintf('module: %s, version: %s', $module, $version));
+        if (defined($version)) {
+
+            $hash->{'provides'}->{$package}->{'version'} = $version;
+
+        } else {
+
+            $hash->{'provides'}->{$package}->{'version'} = 'undef';
+
+        }
+
+        $hash->{'provides'}->{$package}->{'pathname'} = $path;
 
     };
 
-    my $build_version = sub {
+    my $process_version = sub {
         my $version = shift;
 
         if ($hash->{'provides'}->{$package}->{'version'} eq 'undef') {
@@ -458,135 +520,52 @@ sub _collect_package_details {
 
         }
 
-        $self->log->debug(sprintf('version: %s', $version));
-
     };
 
-    my $get_modules = sub {
+    my $process_module = sub {
+        my $module = shift;
         my $version = shift;
-        my $children = shift;
 
-        my $module;
-
-        foreach my $child (@$children) {
-
-            if ($child->isa('PPI::Token::QuoteLike::Words')) {
-
-                my @datum = $child->literal; 
-
-                foreach my $data (@datum) {
-
-                    $build_requires->($data, $version);
-
-                }
-
-            } elsif ($child->isa('PPI::Token::Quote::Single')) {
-
-                $module = $child->string;
-
-                $build_requires->($module, $version);
-
-            } elsif ($child->isa('PPI::Token::Quote::Double')) {
-
-                $module = $child->string;
-
-                $build_requires->($module, $version);
-
-            }
-
-        }
+        $hash->{'requires'}->{$module}->{'phase'} = 'runtime';
+        $hash->{'requires'}->{$module}->{'version'} = $version;
+        $hash->{'requires'}->{$module}->{'relation'} = 'required';
 
     };
 
-    foreach my $element ($dom->elements) {
+    my $dom = PPI::Document->new($content, readonly => 1);
+    my $token = $dom->first_token;
 
-        if ($element->isa('PPI::Statement::Package')) {
+    do {
 
-            my ($top, @rest) = splitdir($path);
-            my $pathname = catfile(@rest);
+        if ($token->isa('PPI::Token::Word')) {
 
-            $package = $element->namespace;
-            $self->log->debug(sprintf('package: %s', $package));
+            if ($token->content eq 'package') {
 
-            $hash->{'provides'}->{$package}->{'pathname'} = $pathname;
-            $hash->{'provides'}->{$package}->{'version'} = 'undef';
+                $self->_parse_package(\$token, $process_package);
 
-            $self->log->debug(sprintf('pathname: %s', $pathname));
+            } elsif (($token->content eq 'use') ||
+                     ($token->content eq 'require')) {
 
-            next;
-
-        } elsif ($element->isa('PPI::Statement::Include')) {
-
-            my $module;
-            my $version;
-
-            next if ($element->type !~ $USE);
-            next if ($element->module =~ $USELESS);
-            next if ($element->module eq '');
-
-            if ($element->module eq 'base') {
-
-                $version = 0;
-                my @children = $element->children;
-
-                $get_modules->($version, \@children);
-
-            } else {
-
-                $module  = $element->module;
-                $version = $element->module_version || '0';
-
-                $build_requires->($module, $version);
+                $self->_parse_module(\$token, $process_module);
 
             }
 
-            next;
+        } elsif ($token->isa('PPI::Token::Symbol')) {
 
-        } elsif ($element->isa('PPI::Statement::Variable')) {
+            if ($token->content =~ $xVERSION) {
 
-            my $version = '0';
+                $self->_parse_version(\$token, $process_version);
 
-            if ($element->content =~ /\@ISA/ ) {
+            } elsif ($token->content =~ $xISA) {
 
-                my @children = $element->children;
-
-                $get_modules->($version, \@children);
-
-            }
-
-            next;
-
-        } elsif ($element->isa('PPI::Statement')) {
-
-            if ($element->content =~ $xVERSION) {
-
-my $dumper = PPI::Dumper->new($element);
-$dumper->print;
-
-                my $version;
-                my @tokens = $element->tokens;
-
-                foreach my $token (@tokens) {
-
-                    if ($token->isa('PPI::Token::Symbol')) {
-
-                        last if ($token->content !~ $xVERSION);
-
-                        $version = $self->_get_version($token);
-                        $build_version->($version);
-                        last;
-
-                    }
-
-                }
+                $self->_parse_isa(\$token, $process_module);
 
             }
 
         }
 
-    }
+    } while ($token = $token->next_token);
 
-    $dom = undef;
     $self->log->debug('leaving _collect_package_details()');
 
 }
@@ -803,71 +782,307 @@ sub _collect_meta_details {
 
 }
 
-sub _get_version {
+sub _parse_version {
     my $self = shift;
     my $token = shift;
+    my $callback = shift;
 
-    # a VERSION statement could have the following:
+    my $version = 'undef';
+
+    # $VERSION - declarations
     #
     # our $VERSION = '0.01';
+    # word,whitespace,symbol,whitespace,operator,whitespace,quote,structure
     #
-    # which would parse out to be:
+    # our $VERSION = 0.01;
+    # word,whitespace,symbol,whitespace,operator,whitespace,number,structure
     #
-    # word,whitespace,symbol,whitespace,operator,whitespace,quote|number,structure
+    # $Module::VERSION = '0.01';
+    # symbol,whitespace,operator,whitspace,quote,structure
     #
-    # or
+    # $Module::VERSION = 0.01;
+    # symbol,whitespace,operator,whitspace,number,structure
     #
-    # $VERSION = '0.01';
-    #
-    # which would parse out to be:
-    #
-    # symbol,whitespace,operator,whitspace,quote|number,structure
-    #
-    # so the following parses the tokens looking for specific ones. it ends
-    # when "struture" is reached. otherwise the rest of the dom is processed.
+    # our $VERSION = version->declare('0.01');
+    # word,whitespace,symbol,whitespace,operator,whitespace,
+    #    word,operator,word,structure,quote,structure,structure
     #
 
-    do {
+    $self->_check_previous($token, 'our');
 
-        if ($token->isa('PPI::Token::Word')) {
+    while ($$token = $$token->next_token) {
 
-            return 'undef' if ($token->content ne 'our');
+        $self->log->debug(
+            sprintf('_parse_version - ref: %s, content: %s', 
+                ref($$token), $$token->content)
+        );
 
-        } elsif ($token->isa('PPI::Token::Operator')) {
+        if ($$token->isa('PPI::Token::Operator')) {
 
-            return 'undef' if ($token->content ne '=');
+            $self->_goto_eos($token) if (($$token->content ne '=') &&
+                                         ($$token->content ne '->'));
 
-        } elsif ($token->isa('PPI::Token::Quote')) {
+        } elsif ($$token->isa('PPI::Token::Quote')) {
 
-            if ($token->can('literal')) {
+            $version = $self->_get_quoted($token);
+            $callback->($version);
 
-                return $token->literal;
+            $self->_goto_eos($token);
 
-            } else {
+        } elsif ($$token->isa('PPI::Token::Number')) {
 
-                return $token->string;
+            $version = $self->_get_number($token);
+            $callback->($version);
 
-            }
-
-        } elsif ($token->isa('PPI::Token::Number')) {
-
-            if ($token->can('literal')) {
-
-                return $token->literal;
-
-            } else {
-
-                return $token->content;
-
-            }
-
-        } elsif ($token->isa('PPI::Token::Structure')) {
-
-            return 'undef';
+            $self->_goto_eos($token);
 
         }
 
-    } while ($token = $token->next_token);
+        last if $self->_check_eos($token);
+
+    }
+
+}
+
+sub _parse_isa {
+    my $self = shift;
+    my $token = shift;
+    my $callback = shift;
+
+    my $module;
+    my $version = 'undef';
+
+    # @ISA or "use base" or "use parent" - declarations
+    #
+    # @ISA = 'Module';
+    # symbol,whitespace,operator,whitespace,qutote|quotelike,structure
+    #
+    # use base 'Module';
+    #
+    # word,whitespace,word,whitespace,quote|quotelike,structure
+    #
+    # use parent qw/Module1 Module2/;
+    #
+    # word,whitespace,word,whitespace,quote|quotelike,structure
+    #
+
+    $self->_check_previous($token, 'use');
+
+    while ($$token = $$token->next_token) {
+
+        $self->log->debug(
+            sprintf('_parse_isa - ref: %s, content: %s', 
+                ref($$token), $$token->content)
+        );
+
+        if ($$token->isa('PPI::Token::Quote')) {
+
+            $module = $self->_get_quoted($token);
+            $callback->($module, $version);
+
+        } elsif ($$token->isa('PPI::Token::QuoteLike::Words')) {
+
+            my @datum = $$token->literal; 
+
+            foreach my $data (@datum) {
+
+                $callback->($data, $version);
+
+            }
+
+        }
+
+        last if $self->_check_eos($token);
+
+    }
+
+}
+
+sub _parse_package {
+    my $self = shift;
+    my $token = shift;
+    my $callback = shift;
+
+    my $package = '';
+    my $version = 'undef';
+
+    # package - declartions
+    #
+    # package Package;
+    # word,whitespace,word,structure
+    #
+    # package Package 0.01;
+    # word,whitespace,word,whitespace,number,structure
+    #
+    # package Package 0.01 {
+    # word,whitespace,word,whitespace,number,struture
+    #
+
+    while ($$token = $$token->next_token) {
+
+        $self->log->debug(
+            sprintf('_parse_package - ref: %s, content: %s', 
+                ref($$token), $$token->content)
+        );
+
+        if ($$token->isa('PPI::Token::Word')) {
+
+            $package = $$token->content;
+
+        } elsif ($$token->isa('PPI::Token::Number')) {
+
+            $version = $$token->content;
+
+        } elsif ($$token->isa('PPI::Token::Structure')) {
+
+            last if ($$token->content eq '{');
+
+        }
+
+        last if $self->_check_eos($token);
+
+    }
+
+    $callback->($package, $version);
+
+}
+
+sub _parse_module {
+    my $self = shift;
+    my $token = shift;
+    my $callback = shift;
+
+    my $module = '';
+    my $version = 'undef';
+
+    # module - declarations
+    #
+    # use module;
+    # word,whitepace,word,structure
+    #
+    # use module 1.02;
+    # word,whitespace,word,whitespace,number,structure
+    #
+    # use base 'Module';
+    # word,whitespace,word,whitespace,quote|quotelike,structure
+    #
+    # use parent 'Module';
+    # word,whitespace,word,whitespace,quote|quotelike,structure
+    #
+
+    $self->_check_previous($token, 'use');
+
+    while ($$token = $$token->next_token) {
+
+        $self->log->debug(
+            sprintf('_parse_module - ref: %s, content: %s', 
+                ref($$token), $$token->content)
+        );
+
+        if ($$token->isa('PPI::Token::Word')) {
+
+            if ($$token->content eq 'base') {
+
+                return $self->_parse_isa($token, $callback);
+
+            }
+
+            if ($$token->content eq 'parent') {
+
+                return $self->_parse_isa($token, $callback);
+
+            }
+
+            $module = $$token->content if ($module eq '');
+            $self->_goto_eos($token) if ($$token->content =~ $PRAGMAS);
+
+        } elsif ($$token->isa('PPI::Token::Number')) {
+
+            $version = $self->_get_number($token);
+            $self->_goto_eos($token);
+
+        }
+
+        last if $self->_check_eos($token);
+
+    }
+
+    $module = 'perl' if ($module eq '');
+    $callback->($module, $version);
+
+}
+
+sub _get_quoted {
+    my $self = shift;
+    my $token = shift;
+
+    if ($$token->can('literal')) {
+
+        return $$token->literal;
+
+    } else {
+
+        return $$token->string;
+
+    }
+
+}
+
+sub _get_number {
+    my $self = shift;
+    my $token = shift;
+
+    if ($$token->can('literal')) {
+
+        return $$token->literal;
+
+    } else {
+
+        return $$token->content;
+
+    }
+
+}
+
+sub _goto_eos {
+    my $self = shift;
+    my $token = shift;
+
+    while ($$token = $$token->next_token) {
+
+        last if $self->_check_eos($token);
+
+    }
+
+    $$token = $$token->previous_token;
+
+}
+
+sub _check_eos {
+    my $self = shift;
+    my $token = shift;
+
+    return (($$token->isa('PPI::Token::Structure')) &&
+            ($$token->content eq ';'));
+
+}
+
+sub _check_previous {
+    my $self;
+    my $token = shift;
+    my $wanted = shift;
+
+    if (my $t = $$token->sprevious_sibling) {
+
+        $self->log->debug(
+            sprintf('_check_previous - last: %s, content: %s', 
+                ref($t), $t->content)
+        );
+
+        $self->_goto_eos($token) if ($t->content eq '');
+        $self->_goto_eos($token) if ($t->content ne $wanted);
+
+    }
 
 }
 
@@ -879,7 +1094,7 @@ sub init {
 
     $packages->path('/modules/02packages.details.txt.gz');
 
-    $self->{packages} = XAS::Darkpan::DB::Packages->new(
+    $self->{database} = XAS::Darkpan::DB::Packages->new(
         -schema => $self->schema,
         -url    => $packages,
     );

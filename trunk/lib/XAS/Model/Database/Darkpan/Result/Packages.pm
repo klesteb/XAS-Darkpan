@@ -80,18 +80,24 @@ __PACKAGE__->optimistic_locking_strategy('version');
 __PACKAGE__->optimistic_locking_version_column('revision');
 
 __PACKAGE__->has_many( 
-    modules => 'XAS::Model::Database::Darkpan::Result::Provides', 
+    provides => 'XAS::Model::Database::Darkpan::Result::Provides', 
     { 'foreign.package_id' => 'self.id' },
 );
 
 __PACKAGE__->has_many( 
-    modules => 'XAS::Model::Database::Darkpan::Result::Requires', 
+    requires => 'XAS::Model::Database::Darkpan::Result::Requires', 
     { 'foreign.package_id' => 'self.id' },
 );
 
 __PACKAGE__->has_one( 
     mirrors => 'XAS::Model::Database::Darkpan::Result::Mirrors', 
     { 'foreign.mirror' => 'self.mirror' },
+    { 'cascade_delete' => 0 },
+);
+
+__PACKAGE__->has_one( 
+    authors => 'XAS::Model::Database::Darkpan::Result::Authors', 
+    { 'foreign.pauseid' => 'self.pauseid' },
     { 'cascade_delete' => 0 },
 );
 

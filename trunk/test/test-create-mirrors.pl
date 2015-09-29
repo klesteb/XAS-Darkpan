@@ -14,5 +14,5 @@ my $mirrors = XAS::Darkpan::Process::Mirrors->new(
     -lockmgr => $lockmgr,
 );
 
-$mirrors->reload();
+$mirrors->create();
 
