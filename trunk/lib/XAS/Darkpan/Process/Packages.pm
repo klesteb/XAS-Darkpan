@@ -53,24 +53,27 @@ sub create {
     ]);
 
     my $fh;
+    my $criteria = {
+        mirror => $mirror->service
+    };
     my $module = $self->class;
     my $program = $self->env->script;
     my $dt = DateTime->now(time_zone => 'GMT');
     my $file = File($self->path, '02packages.details.txt.gz');
-    my $packages = $self->database->data(-criteria => { mirror => $mirror });
+    my $packages = $self->database->data(-criteria => $criteria);
 
     my $date  = $dt->strftime('%a %b %d %H:%M:%S %Y %Z');
-    my $count = $self->database->count() + 9;
+    my $count = $self->database->count(-criteria => $criteria) + 9;
     my $path  = $mirror . '/modules/02packages.details.txt';
 
-    $self->log->debug('leaving create_packages()');
+    $self->log->debug('entering create()');
 
     if ($self->lockmgr->lock_directory($self->path)) {
 
         unless ($fh = IO::Zlib->new($file->path, 'wb')) {
 
             $self->throw_msg(
-                dotid($self->class) . '.create_packages.nocreate',
+                dotid($self->class) . '.create.nocreate',
                 'nocreate',
                 $file->path
             );
@@ -187,7 +190,7 @@ sub _copy_archive {
 
     unless ($file->exists) {
 
-        my $contents = $self->fetch($url);
+        my $contents = $self->database->fetch($url);
         my $fh = $file->open('w');
 
         $fh->write($contents);
