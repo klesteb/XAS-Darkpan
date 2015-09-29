@@ -37,7 +37,6 @@ my $PACKAGE  = qr/\.pm$/;
 my $META     = qr/META\.json$|META\.yml$|META\.yaml$/;
 my $TAR      = qr/\.tar\.gz$|\.tar\.Z$|\.tgz$/;
 my $ZIP      = qr/\.zip$/;
-my $LOCATION = qr/remote|local/;
 my $xVERSION = qr/\$(?:\w+::)*VERSION/;
 my $xISA     = qr/\@ISA/;
 my $PRAGMAS  = qr/constant|diagnostics|integer|sigtrap|strict|subs|warnings|sort/;
@@ -52,19 +51,20 @@ sub create {
         { optional => 1, default => $self->mirror, isa => 'Badger::URL' },
     ]);
 
+    $mirror->path('/modules/02packages.details.txt.gz');
+
     my $fh;
     my $criteria = {
         mirror => $mirror->service
     };
-    my $module = $self->class;
-    my $program = $self->env->script;
-    my $dt = DateTime->now(time_zone => 'GMT');
-    my $file = File($self->path, '02packages.details.txt.gz');
+    my $module   = $self->class;
+    my $program  = $self->env->script;
+    my $dt       = DateTime->now(time_zone => 'GMT');
+    my $date     = $dt->strftime('%a %b %d %H:%M:%S %Y %Z');
+    my $file     = File($self->path, '02packages.details.txt.gz');
     my $packages = $self->database->data(-criteria => $criteria);
-
-    my $date  = $dt->strftime('%a %b %d %H:%M:%S %Y %Z');
-    my $count = $self->database->count(-criteria => $criteria) + 9;
-    my $path  = $mirror . '/modules/02packages.details.txt';
+    my $count    = $self->database->count(-criteria => $criteria) + 9;
+    my $path     = $mirror->url;
 
     $self->log->debug('entering create()');
 
