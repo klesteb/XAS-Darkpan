@@ -171,46 +171,6 @@ sub process {
 
 }
 
-sub load {
-    my $self = shift;
-
-    $self->database->load(@_);
-    $self->log->info('loaded packages');
-
-}
-
-sub reload {
-    my $self = shift;
-
-    $self->database->clear(@_);
-    $self->database->load(@_);
-    $self->log->info('reloaded packages');
-
-}
-
-sub clear {
-    my $self = shift;
-
-    $self->database->clear(@_);
-    $self->log->info('cleared packages');
-
-}
-
-sub data {
-    my $self = shift;
-
-    return $self->database->data(@_);
-
-}
-
-sub search {
-    my $self = shift;
-
-    return $self->database->search(@_);
-
-}
-
-
 # ----------------------------------------------------------------------
 # Private Methods
 # ----------------------------------------------------------------------
