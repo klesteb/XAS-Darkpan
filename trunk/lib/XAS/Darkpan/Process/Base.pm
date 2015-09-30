@@ -7,7 +7,7 @@ use Badger::URL;
 use XAS::Class
   debug     => 0,
   version   => $VERSION,
-  base      => 'XAS::Base',
+  base      => 'XAS::Darkpan::Base',
   accessors => 'database',
   vars => {
     PARAMS => {

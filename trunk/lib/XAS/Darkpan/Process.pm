@@ -17,9 +17,9 @@ use XAS::Class
   utils     => 'dotid',
   vars => {
     PARAMS => {
-      -schema => 1,
-      -root   => { optional => 1, isa => 'Badger::Filesystem::Directory', default => Dir('/srv/dpan') },
-      -mirror => { optional => 1, isa => 'Badger::URL', default => Badger::URL->new('http://www.cpan.org') },
+      -schema     => 1,
+      -root       => { optional => 1, isa => 'Badger::Filesystem::Directory', default => Dir('/srv/dpan') },
+      -repository => { optional => 1, isa => 'Badger::URL', default => Badger::URL->new('http://www.cpan.org') },
     }
   }
 ;
@@ -35,7 +35,7 @@ sub create {
 
     $self->log->debug('entering create()');
 
-    my $root       = $self->root->path;
+    my $root       = $self->root;
     my $authors    = Dir($root, 'authors');
     my $modules    = Dir($root, 'modules');
     my $authors_id = Dir($root, 'authors/id');
@@ -58,23 +58,6 @@ sub create {
 
 }
 
-sub inject {
-    my $self = shift;
-    my $p = $self->validate_params(\@_, {
-        -pauseid => 1,
-        -email   => 1,
-        -name    => 1,
-        -package => 1,
-        -mirror  => { isa => 'Badger::URL' },
-    });
-
-    my $pauseid = $p->{'pauseid'};
-    my $package = $p->{'package'};
-    my $email   = $p->{'email'};
-    my $mirror  = $p->{'mirror'};
-
-}
-
 sub mirror {
     my $self = shift;
 
@@ -82,13 +65,17 @@ sub mirror {
     my $auth_id = 'authors/id';
     my $destination = Dir($root, $auth_id);
 
+    my $criteria = {
+        mirror => $self->repository->service
+    };
+
     my $options = {
         order_by => 'package',
     };
 
     $self->log->debug('entering mirror()');
 
-    if (my $rs = $self->packages->database->search(-options => $options)) {
+    if (my $rs = $self->packages->search(-criteria => $criteria, -options => $options)) {
 
         while (my $rec = $rs->next) {
 
@@ -116,8 +103,13 @@ sub load_database {
     $self->log->debug('entering load_database()');
 
     $self->authors->load();
+    $self->log->info('loaded authors');
+
     $self->mirrors->load();
+    $self->log->info('loaded mirrors');
+
     $self->packages->load();
+    $self->log->info('loaded packages');
 
     $self->log->debug('leaving load_database()');
 
@@ -129,8 +121,13 @@ sub clear_database {
     $self->log->debug('entering clear_database()');
 
     $self->authors->clear();
+    $self->log->info('cleared authors');
+
     $self->mirrors->clear();
+    $self->log->info('cleared mirrors');
+
     $self->packages->clear();
+    $self->log->info('cleared packages');
 
     $self->log->debug('leaving clear_database()');
 
@@ -149,24 +146,24 @@ sub init {
     $self->{'lockmgr'} = XAS::Lib::Modules::Locking->new();
 
     $self->{'authors'} = XAS::Darkpan::Process::Authors->new(
-        -schmea  => $self->schema,
+        -schema  => $self->schema,
         -lockmgr => $self->lockmgr,
         -path    => Dir($root, 'authors'),
-        -mirror  => $self->mirror->copy()
+        -mirror  => $self->repository->copy()
     );
 
     $self->{'mirrors'} = XAS::Darkpan::Process::Mirrors->new(
-        -schmea  => $self->schema,
+        -schema  => $self->schema,
         -lockmgr => $self->lockmgr,
         -path    => Dir($root, 'modules'),
-        -mirror  => $self->mirror->copy()
+        -mirror  => $self->repository->copy()
     );
 
     $self->{'packages'} = XAS::Darkpan::Process::Packages->new(
-        -schmea  => $self->schema,
+        -schema  => $self->schema,
         -lockmgr => $self->lockmgr,
         -path    => Dir($root, 'authors/id'),
-        -mirror  => $self->mirror->copy()
+        -mirror  => $self->repository->copy()
     );
 
     return $self;

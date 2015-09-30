@@ -29,6 +29,9 @@ use XAS::Class
   }
 ;
 
+use PPI::Dumper;
+use Data::Dumper;
+
 # ----------------------------------------------------------------------
 # Compiled regex's
 # ----------------------------------------------------------------------
@@ -190,7 +193,7 @@ sub _copy_archive {
 
     unless ($file->exists) {
 
-        my $contents = $self->database->fetch($url);
+        my $contents = $self->fetch($url);
         my $fh = $file->open('w');
 
         $fh->write($contents);
@@ -380,7 +383,7 @@ sub _inspect_tar_archive {
 
     }
 
-    $self->log->debug('leaving _inspect_tar_archie()');
+    $self->log->debug('leaving _inspect_tar_archive()');
 
 }
 
@@ -404,7 +407,7 @@ sub _inspect_zip_archive {
     my $archive = $p->{'filename'};
     my $callback = $p->{'callback'};
 
-    $self->log->debug('entering _inspect_zip_archie()');
+    $self->log->debug('entering _inspect_zip_archive()');
 
     if ($arc = Archive::Zip->new($archive->path)) {
 
@@ -440,7 +443,7 @@ sub _inspect_zip_archive {
 
     }
 
-    $self->log->debug('leaving _inspect_zip_archie()');
+    $self->log->debug('leaving _inspect_zip_archive()');
 
 }
 
@@ -453,6 +456,8 @@ sub _collect_package_details {
     $self->log->debug('entering _collect_package_details()');
 
     my $package;
+    my ($top, @rest) = splitdir($path);
+    my $pathname = catfile(@rest);
 
     my $process_package = sub {
         my $xpackage = shift;
@@ -461,7 +466,7 @@ sub _collect_package_details {
         $package = $xpackage;
 
         $hash->{'provides'}->{$package}->{'version'} = $version;
-        $hash->{'provides'}->{$package}->{'pathname'} = $path;
+        $hash->{'provides'}->{$package}->{'pathname'} = $pathname;
 
     };
 
@@ -761,6 +766,9 @@ sub _parse_version {
     # word,whitespace,symbol,whitespace,operator,whitespace,
     #    word,operator,word,structure,quote,structure,structure
     #
+    # our $VERSION = sprintf("%d.%02d", q$Revision: 1.5 $=~/(\d+)\.(\d+)/);
+    # not supported - version = undef
+    #
 
     $self->_check_previous($token, 'our');
 
@@ -779,6 +787,11 @@ sub _parse_version {
         } elsif ($$token->isa('PPI::Token::Quote')) {
 
             $version = $self->_get_quoted($token);
+
+            $self->log->debug(
+                sprintf('_parse_version - version: %s', $version)
+            ); 
+
             $callback->($version);
 
             $self->_goto_eos($token);
@@ -786,10 +799,19 @@ sub _parse_version {
         } elsif ($$token->isa('PPI::Token::Number')) {
 
             $version = $self->_get_number($token);
+
+            $self->log->debug(
+                sprintf('_parse_version - version: %s', $version)
+            );
+
             $callback->($version);
 
             $self->_goto_eos($token);
 
+        } elsif ($$token->isa('PPI::Token::Word')) {
+            
+            $self->_goto_eos($token) if ($$token->content eq 'sprintf');
+            
         }
 
         last if $self->_check_eos($token);
@@ -832,6 +854,10 @@ sub _parse_isa {
         if ($$token->isa('PPI::Token::Quote')) {
 
             $module = $self->_get_quoted($token);
+            $self->log->debug(
+                sprintf('_parse_isa - module: %s, version %s', $module, $version)
+            );
+
             $callback->($module, $version);
 
         } elsif ($$token->isa('PPI::Token::QuoteLike::Words')) {
@@ -840,6 +866,9 @@ sub _parse_isa {
 
             foreach my $data (@datum) {
 
+                $self->log->debug(
+                    sprintf('_parse_isa - module: %s, version %s', $data, $version)
+                );
                 $callback->($data, $version);
 
             }
@@ -896,6 +925,10 @@ sub _parse_package {
         last if $self->_check_eos($token);
 
     }
+
+    $self->log->debug(
+        sprintf('_parse_package - package: %s, version: %s', $package, $version)
+    );
 
     $callback->($package, $version);
 
@@ -961,7 +994,12 @@ sub _parse_module {
 
     }
 
-    $module = 'perl' if ($module eq '');
+    $module = 'perl' if ($module eq ''); # safe assumption ??
+
+    $self->log->debug(
+        sprintf('_parse_module - module: %s, version: %s', $module, $version)
+    );
+
     $callback->($module, $version);
 
 }
@@ -1022,7 +1060,7 @@ sub _check_eos {
 }
 
 sub _check_previous {
-    my $self;
+    my $self  = shift;
     my $token = shift;
     my $wanted = shift;
 

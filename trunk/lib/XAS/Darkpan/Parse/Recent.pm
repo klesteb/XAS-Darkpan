@@ -10,7 +10,7 @@ use Params::Validate 'CODEREF';
 use XAS::Class
   debug     => 0,
   version   => $VERSION,
-  base      => 'XAS::Darkpan::Parse::Base',
+  base      => 'XAS::Darkpan::Base',
   accessors => 'data meta',
   vars => {
     PARAMS => {
