@@ -7,13 +7,12 @@ use Badger::Filesystem 'Dir';
 use XAS::Lib::Modules::Locking;
 use XAS::Darkpan::Process::Authors;
 use XAS::Darkpan::Process::Mirrors;
-use XAS::Darkpan::Process::Modlist;
 use XAS::Darkpan::Process::Packages;
 
 use XAS::Class
   debug     => 0,
   version   => $VERSION,
-  base      => 'XAS::Darkpan::Base',
+  base      => 'XAS::Base',
   accessors => 'packages authors mirrors lockmgr',
   utils     => 'dotid',
   vars => {
@@ -96,7 +95,7 @@ sub mirror {
             my $path = sprintf("%s/%s/%s", $rec->mirror, $auth_id, $rec->pathname);
             my $url  = Badger::URL->new($path);
 
-            $self->packages->inject(
+            $self->packages->process(
                 -url         => $url,
                 -pauseid     => $rec->pauseid,
                 -package_id  => $rec->id,
@@ -145,7 +144,7 @@ sub init {
     my $class = shift;
 
     my $self = $class->SUPER::init(@_);
-    my $root = $self->root;
+    my $root = $self->root->path;
 
     $self->{'lockmgr'} = XAS::Lib::Modules::Locking->new();
 
