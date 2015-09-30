@@ -48,11 +48,6 @@ __PACKAGE__->belongs_to(
     { 'foreign.mirror' => 'self.mirror' },
 );
 
-__PACKAGE__->belongs_to( 
-    authors => 'XAS::Model::Database::Darkpan::Result::Authors',
-    { 'foreign.mirror' => 'self.mirror' },
-);
-
 sub sqlt_deploy_hook {
     my ($self, $sqlt_table) = @_;
    

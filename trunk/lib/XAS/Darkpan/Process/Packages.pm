@@ -29,7 +29,7 @@ use XAS::Class
   }
 ;
 
-use PPI::Dumper;
+#use PPI::Dumper;
 use Data::Dumper;
 
 # ----------------------------------------------------------------------
@@ -37,6 +37,7 @@ use Data::Dumper;
 # ----------------------------------------------------------------------
 
 my $PACKAGE  = qr/\.pm$/;
+my $README   = qr/README$/;
 my $META     = qr/META\.json$|META\.yml$|META\.yaml$/;
 my $TAR      = qr/\.tar\.gz$|\.tar\.Z$|\.tgz$/;
 my $ZIP      = qr/\.zip$/;
@@ -210,6 +211,20 @@ sub _load_archive {
     my ($file, $package_id) = $self->validate_params(\@_, [1,1]);
 
     my $hash = {}; # this will be normalized
+
+    # The archive is loaded and the modules are parsed using PPI, looking 
+    # for package names, package version and any included modules, along 
+    # with their desired versions. The hash is populated with what is 
+    # found.
+    #
+    # If there is a META file, it is loaded and the results are used to
+    # overlay the hash. This supersedes the parsing of the modules. 
+    #
+    # So why bother with the module parsing? 
+    #
+    # The reason for the parsing is that there may not be a META file 
+    # or the META file may not provide all of the needed information.
+    # 
 
     $self->log->debug('entering _load_archive()');
 
@@ -455,7 +470,8 @@ sub _collect_package_details {
 
     $self->log->debug('entering _collect_package_details()');
 
-    my $package;
+    my $package = undef;
+    my $pversion = undef;
     my ($top, @rest) = splitdir($path);
     my $pathname = catfile(@rest);
 
@@ -465,17 +481,38 @@ sub _collect_package_details {
 
         $package = $xpackage;
 
-        $hash->{'provides'}->{$package}->{'version'} = $version;
         $hash->{'provides'}->{$package}->{'pathname'} = $pathname;
+
+        if (defined($pversion)) {
+
+            # version before package
+
+            $hash->{'provides'}->{$package}->{'version'} = $pversion;
+
+        } else {
+
+            $hash->{'provides'}->{$package}->{'version'} = $version;
+
+        }
 
     };
 
     my $process_version = sub {
         my $version = shift;
 
-        if ($hash->{'provides'}->{$package}->{'version'} eq 'undef') {
+        if (defined($package)) {
 
-            $hash->{'provides'}->{$package}->{'version'} = $version;
+            if ($hash->{'provides'}->{$package}->{'version'} eq 'undef') {
+
+                $hash->{'provides'}->{$package}->{'version'} = $version;
+
+            }
+
+        } else {
+
+            # version before package 
+
+            $pversion = $version;
 
         }
 
@@ -524,6 +561,12 @@ sub _collect_package_details {
         }
 
     } while ($token = $token->next_token);
+
+    if (defined($pversion)) {
+
+        $hash->{'provides'}->{$package}->{'version'} = $pversion;
+
+    }
 
     $self->log->debug('leaving _collect_package_details()');
 
@@ -767,7 +810,7 @@ sub _parse_version {
     #    word,operator,word,structure,quote,structure,structure
     #
     # our $VERSION = sprintf("%d.%02d", q$Revision: 1.5 $=~/(\d+)\.(\d+)/);
-    # not supported - version = undef
+    # not currently supported - version = undef
     #
 
     $self->_check_previous($token, 'our');
@@ -840,6 +883,9 @@ sub _parse_isa {
     # use parent qw/Module1 Module2/;
     #
     # word,whitespace,word,whitespace,quote|quotelike,structure
+    #
+    # push(@ISA, 'Module');
+    # not currently supported
     #
 
     $self->_check_previous($token, 'use');

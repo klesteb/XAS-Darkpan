@@ -102,11 +102,11 @@ sub load_database {
 
     $self->log->debug('entering load_database()');
 
-    $self->authors->load();
-    $self->log->info('loaded authors');
-
     $self->mirrors->load();
     $self->log->info('loaded mirrors');
+
+    $self->authors->load();
+    $self->log->info('loaded authors');
 
     $self->packages->load();
     $self->log->info('loaded packages');
@@ -120,11 +120,11 @@ sub clear_database {
 
     $self->log->debug('entering clear_database()');
 
-    $self->authors->clear();
-    $self->log->info('cleared authors');
-
     $self->mirrors->clear();
     $self->log->info('cleared mirrors');
+
+    $self->authors->clear();
+    $self->log->info('cleared authors');
 
     $self->packages->clear();
     $self->log->info('cleared packages');
