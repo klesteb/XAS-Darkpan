@@ -18,10 +18,11 @@ use Params::Validate qw/CODEREF HASHREF/;
 use File::Spec::Functions qw/splitdir catfile/;
 
 use XAS::Class
-  debug     => 0,
-  version   => $VERSION,
-  base      => 'XAS::Darkpan::Process::Base',
-  utils     => 'dotid left',
+  debug   => 0,
+  version => $VERSION,
+  base    => 'XAS::Darkpan::Process::Base',
+  mixin   => 'XAS::Lib::Mixins::Handlers',
+  utils   => 'dotid left',
   vars => {
     PARAMS => {
       -path => { optional => 1, isa => 'Badger::Filesystem::Directory', default => Dir('/srv/dpan/authors/id') },
@@ -166,9 +167,12 @@ sub process {
 
     if ($self->lockmgr->lock_directory($lock)) {
 
-        $self->_copy_archive($url, $file);
-        $self->_load_archive($file, $package_id);
-        $self->_checksum($file->directory);
+        if ($self->_copy_archive($url, $file)) {
+
+            $self->_load_archive($file, $package_id);
+            $self->_checksum($file->directory);
+
+        }
 
         $self->lockmgr->unlock_directory($lock);
 
@@ -189,8 +193,10 @@ sub _copy_archive {
        { isa => 'Badger::Filesystem::File' },
     ]);
 
+    my $stat = 0;
+
     $self->log->debug('entering _copy_archive()');
-    $self->log->debug('copying '. $url);
+    $self->log->debug(sprintf('copying: %s, to %s', $url, $file));
 
     unless ($file->exists) {
 
@@ -200,9 +206,13 @@ sub _copy_archive {
         $fh->write($contents);
         $fh->close;
 
+        $stat = 1;
+
     }
 
     $self->log->debug('leaving _copy_archive()');
+
+    return $stat;
 
 }
 
@@ -428,7 +438,7 @@ sub _inspect_zip_archive {
 
         foreach my $member ($arc->membersMatching($filter)) {
 
-            my $file = $member->filename;
+            my $file = $member->fileName;
 
             next unless ($member->isTextFile && 
                          $self->_package_at_usual_location($file));
@@ -477,7 +487,7 @@ sub _collect_package_details {
 
     my $process_package = sub {
         my $xpackage = shift;
-        my $version = shift;
+        my $xversion = shift;
 
         $package = $xpackage;
 
@@ -491,7 +501,7 @@ sub _collect_package_details {
 
         } else {
 
-            $hash->{'provides'}->{$package}->{'version'} = $version;
+            $hash->{'provides'}->{$package}->{'version'} = $xversion;
 
         }
 
@@ -500,6 +510,8 @@ sub _collect_package_details {
     my $process_version = sub {
         my $version = shift;
 
+        $pversion = $version;
+
         if (defined($package)) {
 
             if ($hash->{'provides'}->{$package}->{'version'} eq 'undef') {
@@ -507,12 +519,6 @@ sub _collect_package_details {
                 $hash->{'provides'}->{$package}->{'version'} = $version;
 
             }
-
-        } else {
-
-            # version before package 
-
-            $pversion = $version;
 
         }
 
@@ -580,205 +586,218 @@ sub _collect_meta_details {
 
     $self->log->debug('entering _collect_meta_details()');
 
-    my $meta = $self->_load_meta($content);
-    my $prereqs = $meta->effective_prereqs();
+    my $meta;
+    my $prereqs;
 
-    if (my $data = $meta->as_struct) {
+    try {
 
-        if (defined($data->{'provides'})) {
+        $meta    = $self->_load_meta($content);
+        $prereqs = $meta->effective_prereqs();
 
-            $self->log->debug('found provides');
+        if (my $data = $meta->as_struct) {
 
-            while (my ($key, $value) = each($data->{'provides'})) {
+            if (defined($data->{'provides'})) {
 
-                $hash->{'provides'}->{$key}->{'version'} = $value->{'version'};
-                $hash->{'provides'}->{$key}->{'pathname'} = $value->{'file'};
+                $self->log->debug('found provides');
+
+                while (my ($key, $value) = each($data->{'provides'})) {
+
+                    $hash->{'provides'}->{$key}->{'version'} = $value->{'version'};
+                    $hash->{'provides'}->{$key}->{'pathname'} = $value->{'file'};
+
+                }
 
             }
 
         }
 
-    }
+        if (my $data = $prereqs->requirements_for('build','requires')) {
 
-    if (my $data = $prereqs->requirements_for('build','requires')) {
+            $self->log->debug('found build/requires');
+            my $expr = $data->as_string_hash();
 
-        $self->log->debug('found build/requires');
-        my $expr = $data->as_string_hash();
+            while (my ($key, $value) = each($expr)) {
 
-        while (my ($key, $value) = each($expr)) {
+                $hash->{'requires'}->{$key}->{'phase'} = 'build';
+                $hash->{'requires'}->{$key}->{'version'} = $value;
+                $hash->{'requires'}->{$key}->{'relation'} = 'required';
 
-            $hash->{'requires'}->{$key}->{'phase'} = 'build';
-            $hash->{'requires'}->{$key}->{'version'} = $value;
-            $hash->{'requires'}->{$key}->{'relation'} = 'required';
-
-        }
-
-    }
-
-    if (my $data = $prereqs->requirements_for('build','recommends')) {
-
-        $self->log->debug('found build/recommends');
-        my $expr = $data->as_string_hash();
-
-        while (my ($key, $value) = each($expr)) {
-
-            $hash->{'requires'}->{$key}->{'phase'} = 'build';
-            $hash->{'requires'}->{$key}->{'version'} = $value;
-            $hash->{'requires'}->{$key}->{'relation'} = 'recommends';
+            }
 
         }
 
-    }
+        if (my $data = $prereqs->requirements_for('build','recommends')) {
 
-    if (my $data = $prereqs->requirements_for('build','suggests')) {
+            $self->log->debug('found build/recommends');
+            my $expr = $data->as_string_hash();
 
-        $self->log->debug('found build/suggests');
-        my $expr = $data->as_string_hash();
+            while (my ($key, $value) = each($expr)) {
 
-        while (my ($key, $value) = each($expr)) {
+                $hash->{'requires'}->{$key}->{'phase'} = 'build';
+                $hash->{'requires'}->{$key}->{'version'} = $value;
+                $hash->{'requires'}->{$key}->{'relation'} = 'recommends';
 
-            $hash->{'requires'}->{$key}->{'phase'} = 'build';
-            $hash->{'requires'}->{$key}->{'version'} = $value;
-            $hash->{'requires'}->{$key}->{'relation'} = 'suggests';
-
-        }
-
-    }
-
-    if (my $data = $prereqs->requirements_for('build','conflicts')) {
-
-        $self->log->debug('found build/conflicts');
-        my $expr = $data->as_string_hash();
-
-        while (my ($key, $value) = each($expr)) {
-
-            $hash->{'requires'}->{$key}->{'phase'} = 'build';
-            $hash->{'requires'}->{$key}->{'version'} = $value;
-            $hash->{'requires'}->{$key}->{'relation'} = 'conflicts';
+            }
 
         }
 
-    }
+        if (my $data = $prereqs->requirements_for('build','suggests')) {
 
-    if (my $data = $prereqs->requirements_for('test','requires')) {
+            $self->log->debug('found build/suggests');
+            my $expr = $data->as_string_hash();
 
-        $self->log->debug('found test/requires');
-        my $expr = $data->as_string_hash();
+            while (my ($key, $value) = each($expr)) {
 
-        while (my ($key, $value) = each($expr)) {
+                $hash->{'requires'}->{$key}->{'phase'} = 'build';
+                $hash->{'requires'}->{$key}->{'version'} = $value;
+                $hash->{'requires'}->{$key}->{'relation'} = 'suggests';
 
-            $hash->{'requires'}->{$key}->{'phase'} = 'test';
-            $hash->{'requires'}->{$key}->{'version'} = $value;
-            $hash->{'requires'}->{$key}->{'relation'} = 'required';
-
-        }
-
-    }
-
-    if (my $data = $prereqs->requirements_for('test','recommends')) {
-
-        $self->log->debug('found test/recommends');
-        my $expr = $data->as_string_hash();
-
-        while (my ($key, $value) = each($expr)) {
-
-            $hash->{'requires'}->{$key}->{'phase'} = 'test';
-            $hash->{'requires'}->{$key}->{'version'} = $value;
-            $hash->{'requires'}->{$key}->{'relation'} = 'recommends';
+            }
 
         }
 
-    }
+        if (my $data = $prereqs->requirements_for('build','conflicts')) {
 
-    if (my $data = $prereqs->requirements_for('test','suggests')) {
+            $self->log->debug('found build/conflicts');
+            my $expr = $data->as_string_hash();
 
-        $self->log->debug('found test/suggests');
-        my $expr = $data->as_string_hash();
+            while (my ($key, $value) = each($expr)) {
 
-        while (my ($key, $value) = each($expr)) {
+                $hash->{'requires'}->{$key}->{'phase'} = 'build';
+                $hash->{'requires'}->{$key}->{'version'} = $value;
+                $hash->{'requires'}->{$key}->{'relation'} = 'conflicts';
 
-            $hash->{'requires'}->{$key}->{'phase'} = 'test';
-            $hash->{'requires'}->{$key}->{'version'} = $value;
-            $hash->{'requires'}->{$key}->{'relation'} = 'suggests';
-
-        }
-
-    }
-
-    if (my $data = $prereqs->requirements_for('test','conflicts')) {
-
-        $self->log->debug('found test/conflicts');
-        my $expr = $data->as_string_hash();
-
-        while (my ($key, $value) = each($expr)) {
-
-            $hash->{'requires'}->{$key}->{'phase'} = 'test';
-            $hash->{'requires'}->{$key}->{'version'} = $value;
-            $hash->{'requires'}->{$key}->{'relation'} = 'conflicts';
+            }
 
         }
 
-    }
+        if (my $data = $prereqs->requirements_for('test','requires')) {
 
-    if (my $data = $prereqs->requirements_for('runtime','requires')) {
+            $self->log->debug('found test/requires');
+            my $expr = $data->as_string_hash();
 
-        $self->log->debug('found runtime/requires');
-        my $expr = $data->as_string_hash();
+            while (my ($key, $value) = each($expr)) {
 
-        while (my ($key, $value) = each($expr)) {
+                $hash->{'requires'}->{$key}->{'phase'} = 'test';
+                $hash->{'requires'}->{$key}->{'version'} = $value;
+                $hash->{'requires'}->{$key}->{'relation'} = 'required';
 
-            $hash->{'requires'}->{$key}->{'phase'} = 'runtime';
-            $hash->{'requires'}->{$key}->{'version'} = $value;
-            $hash->{'requires'}->{$key}->{'relation'} = 'required';
-
-        }
-
-    }
-
-    if (my $data = $prereqs->requirements_for('runtime','recommends')) {
-
-        $self->log->debug('found runtime/recommends');
-        my $expr = $data->as_string_hash();
-
-        while (my ($key, $value) = each($expr)) {
-
-            $hash->{'requires'}->{$key}->{'phase'} = 'runtime';
-            $hash->{'requires'}->{$key}->{'version'} = $value;
-            $hash->{'requires'}->{$key}->{'relation'} = 'recommends';
+            }
 
         }
 
-    }
+        if (my $data = $prereqs->requirements_for('test','recommends')) {
+
+            $self->log->debug('found test/recommends');
+            my $expr = $data->as_string_hash();
+
+            while (my ($key, $value) = each($expr)) {
+
+                $hash->{'requires'}->{$key}->{'phase'} = 'test';
+                $hash->{'requires'}->{$key}->{'version'} = $value;
+                $hash->{'requires'}->{$key}->{'relation'} = 'recommends';
+
+            }
+
+        }
+
+        if (my $data = $prereqs->requirements_for('test','suggests')) {
+
+            $self->log->debug('found test/suggests');
+            my $expr = $data->as_string_hash();
+
+            while (my ($key, $value) = each($expr)) {
+
+                $hash->{'requires'}->{$key}->{'phase'} = 'test';
+                $hash->{'requires'}->{$key}->{'version'} = $value;
+                $hash->{'requires'}->{$key}->{'relation'} = 'suggests';
+
+            }
+
+        }
+
+        if (my $data = $prereqs->requirements_for('test','conflicts')) {
+            
+            $self->log->debug('found test/conflicts');
+            my $expr = $data->as_string_hash();
+
+            while (my ($key, $value) = each($expr)) {
+
+                $hash->{'requires'}->{$key}->{'phase'} = 'test';
+                $hash->{'requires'}->{$key}->{'version'} = $value;
+                $hash->{'requires'}->{$key}->{'relation'} = 'conflicts';
+
+            }
+
+        }
+
+        if (my $data = $prereqs->requirements_for('runtime','requires')) {
+
+            $self->log->debug('found runtime/requires');
+            my $expr = $data->as_string_hash();
+            
+            while (my ($key, $value) = each($expr)) {
+
+                $hash->{'requires'}->{$key}->{'phase'} = 'runtime';
+                $hash->{'requires'}->{$key}->{'version'} = $value;
+                $hash->{'requires'}->{$key}->{'relation'} = 'required';
+
+            }
+
+        }
+
+        if (my $data = $prereqs->requirements_for('runtime','recommends')) {
+
+            $self->log->debug('found runtime/recommends');
+            my $expr = $data->as_string_hash();
+
+            while (my ($key, $value) = each($expr)) {
+
+                $hash->{'requires'}->{$key}->{'phase'} = 'runtime';
+                $hash->{'requires'}->{$key}->{'version'} = $value;
+                $hash->{'requires'}->{$key}->{'relation'} = 'recommends';
+
+            }
+
+        }
         
-    if (my $data = $prereqs->requirements_for('runtime','suggests')) {
+        if (my $data = $prereqs->requirements_for('runtime','suggests')) {
 
-        $self->log->debug('found runtime/suggests');
-        my $expr = $data->as_string_hash();
+            $self->log->debug('found runtime/suggests');
+            my $expr = $data->as_string_hash();
 
-        while (my ($key, $value) = each($expr)) {
+            while (my ($key, $value) = each($expr)) {
 
-            $hash->{'requires'}->{$key}->{'phase'} = 'runtime';
-            $hash->{'requires'}->{$key}->{'version'} = $value;
-            $hash->{'requires'}->{$key}->{'relation'} = 'suggests';
+                $hash->{'requires'}->{$key}->{'phase'} = 'runtime';
+                $hash->{'requires'}->{$key}->{'version'} = $value;
+                $hash->{'requires'}->{$key}->{'relation'} = 'suggests';
 
-        }
-
-    }
-
-    if (my $data = $prereqs->requirements_for('runtime','conflicts')) {
-
-        $self->log->debug('found runtime/conflicts');
-        my $expr = $data->as_string_hash();
-
-        while (my ($key, $value) = each($expr)) {
-
-            $hash->{'requires'}->{$key}->{'phase'} = 'runtime';
-            $hash->{'requires'}->{$key}->{'version'} = $value;
-            $hash->{'requires'}->{$key}->{'relation'} = 'conflicts';
+            }
 
         }
 
-    }
+        if (my $data = $prereqs->requirements_for('runtime','conflicts')) {
+
+            $self->log->debug('found runtime/conflicts');
+            my $expr = $data->as_string_hash();
+
+            while (my ($key, $value) = each($expr)) {
+
+                $hash->{'requires'}->{$key}->{'phase'} = 'runtime';
+                $hash->{'requires'}->{$key}->{'version'} = $value;
+                $hash->{'requires'}->{$key}->{'relation'} = 'conflicts';
+
+            }
+
+        }
+
+    } catch {
+
+        my $ex = $_;
+
+        $self->exception_handler($ex);
+
+    };
 
     $self->log->debug('leaving _collect_meta_details()');
 
@@ -965,6 +984,15 @@ sub _parse_package {
         } elsif ($$token->isa('PPI::Token::Structure')) {
 
             last if ($$token->content eq '{');
+
+        } elsif ($$token->isa('PPI::Token::Operator')) {
+
+            if ($$token->content eq '=>') {
+
+                $self->_goto_eos($token);
+                return;
+
+            }
 
         }
 
