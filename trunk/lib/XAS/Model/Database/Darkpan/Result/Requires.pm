@@ -31,6 +31,16 @@ __PACKAGE__->add_columns(
         size          => 8,
         is_nullable   => 0,
     },
+    phase => {
+        data_type     => 'varchar',
+        size          => 16,
+        is_nullable   => 0,
+    },
+    relation => {
+        data_type     => 'varchar',
+        size          => 16,
+        is_nullable   => 0,
+    },
     datetime => {
         data_type     => 'datetime',
         is_nullable   => 0,

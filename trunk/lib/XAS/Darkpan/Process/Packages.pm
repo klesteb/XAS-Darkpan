@@ -22,7 +22,7 @@ use XAS::Class
   version => $VERSION,
   base    => 'XAS::Darkpan::Process::Base',
   mixin   => 'XAS::Lib::Mixins::Handlers',
-  utils   => 'dotid left',
+  utils   => 'dotid left dt2db',
   vars => {
     PARAMS => {
       -path => { optional => 1, isa => 'Badger::Filesystem::Directory', default => Dir('/srv/dpan/authors/id') },
@@ -196,9 +196,10 @@ sub _copy_archive {
     my $stat = 0;
 
     $self->log->debug('entering _copy_archive()');
-    $self->log->debug(sprintf('copying: %s, to %s', $url, $file));
 
     unless ($file->exists) {
+
+        $self->log->info(sprintf('copying: %s, to %s', $url, $file));
 
         my $contents = $self->fetch($url);
         my $fh = $file->open('w');
@@ -220,7 +221,9 @@ sub _load_archive {
     my $self = shift;
     my ($file, $package_id) = $self->validate_params(\@_, [1,1]);
 
-    my $hash = {}; # this will be normalized
+    my $hash   = {}; # this will be normalized
+    my $schema = $self->schema;
+    my $dt     = DateTime->now(time_zone => 'local');
 
     # The archive is loaded and the modules are parsed using PPI, looking 
     # for package names, package version and any included modules, along 
@@ -280,8 +283,50 @@ sub _load_archive {
 
     }
 
-warn Dumper($hash);
-    
+#warn Dumper($hash);
+    $self->schema->txn_do(sub {
+
+        if (defined($hash->{'provides'})) {
+
+            while (my ($key, $value) = each($hash->{'provides'})) {
+
+                my $rec = {
+                    package_id => $package_id,
+                    module     => $key,
+                    version    => $value->{'version'},
+                    pathname   => $value->{'pathname'},
+                    datetime   => dt2db($dt),
+                };
+
+                $self->database->Provides->create($schema, $rec);
+
+            }
+
+        }
+
+        if (defined($hash->{'requires'})) {
+
+            while (my ($key, $value) = each($hash->{'requires'})) {
+
+                my $rec = {
+                    package_id => $package_id,
+                    module     => $key,
+                    version    => $value->{'version'},
+                    phase      => $value->{'phase'},
+                    relation   => $value->{'relation'},
+                    datetime   => dt2db($dt),
+                };
+
+                $self->database->Requires->create($schema, $rec);
+
+            }
+
+        }
+
+        $self->log->info('loaded database');
+
+    });
+
     $self->log->debug('leaving _load_archive()');
 
 }
@@ -480,6 +525,8 @@ sub _collect_package_details {
 
     $self->log->debug('entering _collect_package_details()');
 
+    my $dom;
+    my $token;
     my $package = undef;
     my $pversion = undef;
     my ($top, @rest) = splitdir($path);
@@ -534,45 +581,49 @@ sub _collect_package_details {
 
     };
 
-    my $dom = PPI::Document->new($content, readonly => 1);
-    my $token = $dom->first_token;
+    try {
+        
+        $dom = PPI::Document->new($content, readonly => 1);
+        $token = $dom->first_token;
 
-    do {
+        do {
 
-        if ($token->isa('PPI::Token::Word')) {
+            if ($token->isa('PPI::Token::Word')) {
 
-            if ($token->content eq 'package') {
+                if ($token->content eq 'package') {
 
-                $self->_parse_package(\$token, $process_package);
+                    $self->_parse_package(\$token, $process_package);
 
-            } elsif (($token->content eq 'use') ||
-                     ($token->content eq 'require')) {
+                } elsif (($token->content eq 'use') ||
+                          ($token->content eq 'require')) {
 
-                $self->_parse_module(\$token, $process_module);
+                    $self->_parse_module(\$token, $process_module);
+
+                }
+
+            } elsif ($token->isa('PPI::Token::Symbol')) {
+
+                if ($token->content =~ $xVERSION) {
+
+                    $self->_parse_version(\$token, $process_version);
+
+                } elsif ($token->content =~ $xISA) {
+
+                    $self->_parse_isa(\$token, $process_module);
+
+                }
 
             }
 
-        } elsif ($token->isa('PPI::Token::Symbol')) {
+        } while ($token = $token->next_token);
 
-            if ($token->content =~ $xVERSION) {
+    } catch {
 
-                $self->_parse_version(\$token, $process_version);
+        my $ex = $_;
 
-            } elsif ($token->content =~ $xISA) {
+        $self->exception_handler($ex);
 
-                $self->_parse_isa(\$token, $process_module);
-
-            }
-
-        }
-
-    } while ($token = $token->next_token);
-
-    if (defined($pversion)) {
-
-        $hash->{'provides'}->{$package}->{'version'} = $pversion;
-
-    }
+    };
 
     $self->log->debug('leaving _collect_package_details()');
 
@@ -1160,7 +1211,7 @@ sub init {
 
     $packages->path('/modules/02packages.details.txt.gz');
 
-    $self->{database} = XAS::Darkpan::DB::Packages->new(
+    $self->{'database'} = XAS::Darkpan::DB::Packages->new(
         -schema => $self->schema,
         -url    => $packages,
     );
