@@ -4,7 +4,8 @@ our $VERSION = '0.01';
 
 use Badger::URL;
 use Badger::Filesystem 'Dir';
-use XAS::Lib::Modules::Locking;
+
+use XAS::Lib::Lockmgr;
 use XAS::Darkpan::Process::Authors;
 use XAS::Darkpan::Process::Mirrors;
 use XAS::Darkpan::Process::Packages;
@@ -30,10 +31,10 @@ use XAS::Class
 # Public Methods
 # ----------------------------------------------------------------------
 
-sub create {
+sub create_authors {
     my $self = shift;
 
-    $self->log->debug('entering create()');
+    $self->log->debug('entering create_authors()');
 
     my $root       = $self->root;
     my $authors    = Dir($root, 'authors');
@@ -42,19 +43,47 @@ sub create {
 
     my @dirs = qw(A B C D E F G H I J K L M N O P Q R S T U V W X Y Z);
 
-    $root->create       unless ($root->exists);
-    $authors->create    unless ($authors->exists);
-    $modules->create    unless ($modules->exists);
-    $authors_id->create unless ($authors_id->exists);
+    unless ($root->exists) {
+        
+        $root->create;
+        $root->chmod(02775);
+
+    }
+    
+    unless ($authors->exists) {
+        
+        $authors->create;
+        $authors->chmod(02775);
+        
+    }
+    
+    unless ($modules->exists) {
+        
+        $modules->create;
+        $modules->chmod(02775);
+        
+    }
+
+    unless ($authors_id->exists) {
+        
+        $authors_id->create;
+        $authors_id->chmod(02775);
+        
+    }
 
     foreach my $dir (@dirs) {
 
         my $d = Dir($authors_id,  $dir);
-        $d->create unless ($d->exists);
+        unless ($d->exists) {
+            
+            $d->create ;
+            $d->chmod(02775);
+            
+        }
 
     }
 
-    $self->log->debug('leaving create()');
+    $self->log->debug('leaving create_authors()');
 
 }
 
@@ -115,6 +144,42 @@ sub load_database {
 
 }
 
+sub load_authors {
+    my $self = shift;
+    
+    $self->log->debug('entering load_authors()');
+
+    $self->authors->load();
+    $self->log->info('loaded authors');
+
+    $self->log->debug('leaving load_authors()');
+
+}
+
+sub load_mirrors {
+    my $self = shift;
+    
+    $self->log->debug('entering load_mirrors()');
+
+    $self->mirrors->load();
+    $self->log->info('loaded mirrors');
+
+    $self->log->debug('leaving load_mirrors()');
+    
+}
+
+sub load_packages {
+    my $self = shift;
+    
+    $self->log->debug('entering load_packages()');
+
+    $self->packages->load();
+    $self->log->info('loaded packages');
+
+    $self->log->debug('leaving load_packages()');
+    
+}
+
 sub clear_database {
     my $self = shift;
 
@@ -143,7 +208,7 @@ sub init {
     my $self = $class->SUPER::init(@_);
     my $root = $self->root->path;
 
-    $self->{'lockmgr'} = XAS::Lib::Modules::Locking->new();
+    $self->{'lockmgr'} = XAS::Lib::Lockmgr->new();
 
     $self->{'authors'} = XAS::Darkpan::Process::Authors->new(
         -schema  => $self->schema,

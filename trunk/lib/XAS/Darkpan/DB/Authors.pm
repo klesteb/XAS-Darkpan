@@ -19,7 +19,7 @@ use XAS::Class
   version   => $VERSION,
   base      => 'XAS::Darkpan::DB::Base',
   accessors => 'authors',
-  utils     => 'dt2db',
+  utils     => 'dt2db :validation',
   vars => {
     PARAMS => {
       -url => { optional => 1, isa => 'Badger::URL', default => Badger::URL->new('http://www.cpan.org/authors/01mailrc.txt.gz') },
@@ -35,7 +35,7 @@ use XAS::Class
 
 sub remove {
     my $self = shift;
-    my ($id) = $self->validate_params(\@_, [1]);
+    my ($id) = validate_params(\@_, [1]);
 
     my $schema = $self->schema;
     my $criteria = {
@@ -48,24 +48,27 @@ sub remove {
 
 sub add {
     my $self = shift;
-    my $p = $self->validate_params(\@_, {
+    my $p = validate_params(\@_, {
         -pauseid => 1,
         -name    => 1,
         -email   => 1,
     });
 
+    my $results;
     my $schema = $self->schema;
     my $dt = DateTime->now(time_zone => 'local');
 
-    $p->{datetime} = dt2db($dt);
+    $p->{'datetime'} = dt2db($dt);
 
-    Authors->create_record($schema, $p);
+    $results = Authors->create_record($schema, $p);
 
+    return $results;
+    
 }
 
 sub data {
     my $self = shift;
-    my $p = $self->validate_params(\@_, {
+    my $p = validate_params(\@_, {
        -criteria => { optional => 1, type => HASHREF, default => {} },
        -options  => { optional => 1, type => HASHREF, default => { order_by => 'pauseid' } },
     });
@@ -93,7 +96,7 @@ sub data {
 
 sub search {
     my $self = shift;
-    my $p = $self->validate_params(\@_, {
+    my $p = validate_params(\@_, {
         -criteria => { optional => 1, default => {}, type => HASHREF },
         -options  => { optional => 1, default => {}, type => HASHREF},
     });
@@ -116,9 +119,10 @@ sub load {
         -url          => $self->url,
     );
 
+    $authors->load();
     $authors->parse(sub {
         my $data = shift;
-        $data->{datetime} = dt2db($dt);
+        $data->{'datetime'} = dt2db($dt);
         return unless (defined($data->{'pauseid'}));
         push(@datum, $data);
     });
@@ -131,7 +135,7 @@ sub load {
 
 sub clear {
     my $self = shift;
-    my $p = $self->validate_params(\@_, {
+    my $p = validate_params(\@_, {
         -criteria => { optional => 1, default => {}, type => HASHREF },
     });
 
@@ -143,7 +147,7 @@ sub clear {
 
 sub count {
     my $self = shift;
-    my $p = $self->validate_params(\@_, {
+    my $p = validate_params(\@_, {
         -criteria => { optional => 1, default => {}, type => HASHREF },
     });
 

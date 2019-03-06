@@ -3,6 +3,7 @@ package XAS::Darkpan::Base;
 our $VERSION = '0.01';
 
 use CHI;
+use Try::Tiny;
 use HTTP::Request;
 use Compress::Zlib;
 use XAS::Lib::Curl::HTTP;
@@ -12,10 +13,11 @@ use XAS::Class
   version    => $VERSION,
   base       => 'XAS::Base',
   accessors  => 'cache curl',
-  utils      => 'dotid',
+  utils      => 'dotid :validation',
   filesystem => 'File',
   vars => {
     PARAMS => {
+      -timeout      => { optional => 1, default => 120 },
       -cache_path   => { optional => 1, default => '.cache' },
       -cache_expiry => { optional => 1, default => '3 minutes' },
     }
@@ -28,7 +30,7 @@ use XAS::Class
 
 sub fetch {
     my $self = shift;
-    my ($url) = $self->validate_params(\@_, [
+    my ($url) = validate_params(\@_, [
         { isa => 'Badger::URL' },
     ]);
 
@@ -38,38 +40,46 @@ sub fetch {
     if ($scheme =~ /http/) {
 
         my $response;
-        my $request;
         my $key = $url->path;
+        my $request = HTTP::Request->new(GET => $url->text);
 
-        unless ($content = $self->cache->get($key)) {
+        $request->header('User-Agent', 'XAS Darkpan');
+        $response = $self->curl->request($request);
 
-            $request = HTTP::Request->new(GET => $url->text);
-            $request->header('User-Agent', 'XAS Darkpan');
+        if ($response->is_success) {
 
-            $response = $self->curl->request($request);
+            $content = $response->content;
+            
+        } else {
 
-            if ($response->is_success) {
-
-                $content = $response->content;
-                $self->cache->set($key, $content);
-
-            } else {
-
-                $self->throw_msg(
-                    dotid($self->class) . '.fetch.request',
-                    'badrequest',
-                    $url,
-                    $response->status_line
-                );
-
-            }
+            $self->throw_msg(
+                dotid($self->class) . '.fetch.request',
+                'badrequest',
+                $url,
+                $response->status_line
+            );
 
         }
 
     } elsif ($scheme =~ /file/) {
 
-        my $file = File($url->path);
-        $content = $file->read;
+        try {
+            
+            my $file = File($url->path);
+            $content = $file->read;
+            
+        } catch {
+            
+            my $ex = $_;
+            
+            $self->throw_msg(
+                dotid($self->class) . '.fetch.request',
+                'badrequest',
+                $url,
+                $ex
+            );
+            
+        }
 
     } else {
 
@@ -102,7 +112,7 @@ sub init {
 
     my $self = $class->SUPER::init(@_);
 
-    $self->{cache} = CHI->new(
+    $self->{'cache'} = CHI->new(
         driver     => 'File',
         root_dir   => $self->cache_path,
         expires_in => $self->cache_expiry,
@@ -116,7 +126,7 @@ sub init {
         },
     );
 
-    $self->{curl} = XAS::Lib::Curl::HTTP->new();
+    $self->{'curl'} = XAS::Lib::Curl::HTTP->new( -timeout => $self->timeout );
 
     return $self;
 

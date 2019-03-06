@@ -11,11 +11,11 @@ use XAS::Class
   debug     => 0,
   version   => $VERSION,
   base      => 'XAS::Darkpan::Process::Base',
-  utils     => 'dotid',
+  utils     => 'dotid :validation',
   codec     => 'JSON',
   vars => {
     PARAMS => {
-      -path => { optional => 1, isa => 'Badger::Filesystem::Directory', default => Dir('/srv/dpan/modules/07mirrors.json') },
+      -path => { optional => 1, isa => 'Badger::Filesystem::Directory', default => Dir('/srv/dpan/modules/07mirror.json') },
     }
   }
 ;
@@ -30,10 +30,10 @@ sub create {
     $self->log->debug('entering create()');
 
     my $fh;
-    my $file = File($self->path, '01mailrc.txt.gz');
+    my $file = File($self->path, '07mirror.json');
     my $mirrors = $self->database->data();
 
-    if ($self->lockmgr->lock_directory($self->path)) {
+    if ($self->lockmgr->lock($self->path)) {
 
         unless ($fh = IO::Zlib->new($file->path, 'wb')) {
 
@@ -45,10 +45,10 @@ sub create {
 
         }
 
-        $fh->write($mirrors);
+        $fh->print($mirrors);
         $fh->close();
 
-        $self->lockmgr->unlock_directory($self->root);
+        $self->lockmgr->unlock($self->path);
 
     } else {
 
@@ -66,7 +66,7 @@ sub create {
 
 sub inject {
     my $self = shift;
-    my $p = $self->validate_params(\@_, {
+    my $p = validate_params(\@_, {
         -url  => { isa => 'Badger::URL' },
         -type => { optional => default => 'mirror', regex => qr/master|mirror/ },
     });
@@ -95,6 +95,8 @@ sub init {
         -url    => $mirrors,
     );
 
+    $self->lockmgr->add(-key => $self->path);
+    
     return $self;
 
 }

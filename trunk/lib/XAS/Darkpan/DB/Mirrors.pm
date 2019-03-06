@@ -18,7 +18,7 @@ use XAS::Class
   debug   => 0,
   version => $VERSION,
   base    => 'XAS::Darkpan::DB::Base',
-  utils   => 'dt2db',
+  utils   => 'dt2db :validation',
   vars => {
     PARAMS => {
       -url => { optional => 1, isa => 'Badger::URL', default => Badger::URL->new('http://www.cpan.org/modules/07mirror.json') },
@@ -26,13 +26,15 @@ use XAS::Class
   }
 ;
 
+use Data::Dumper;
+
 # ----------------------------------------------------------------------
 # Public Methods
 # ----------------------------------------------------------------------
 
 sub remove {
     my $self = shift;
-    my ($mirror) = $self->validate_params(\@_, [1]);
+    my ($mirror) = validate_params(\@_, [1]);
 
     my $schema = $self->schema;
     my $criteria = {
@@ -45,11 +47,12 @@ sub remove {
 
 sub add {
     my $self = shift;
-    my $p = $self->validate_params(\@_, {
+    my $p = validate_params(\@_, {
         -mirror => 1,
         -type   => 1,
     });
 
+    my $results;
     my $schema = $self->schema;
     my $dt = DateTime->now(time_zone => 'local');
     my $rec = {
@@ -58,13 +61,15 @@ sub add {
         datetime => dt2db($dt),
     };
 
-    Mirrors->create_record($schema, $rec);
+    $results = Mirrors->create_record($schema, $rec);
 
+    return $results;
+    
 }
 
 sub data {
     my $self = shift;
-    my $p = $self->validate_params(\@_, {
+    my $p = validate_params(\@_, {
        -criteria => { optional => 1, type => HASHREF, default => { type => { '!=', 'master' } } },
        -options  => { optional => 1, type => HASHREF, default => {} },
     });
@@ -85,7 +90,7 @@ sub data {
 
         while (my $rec = $rs->next) {
 
-            push(@{$mirrors->{mirrors}}, $rec->mirror);
+            push(@{$mirrors->{'mirrors'}}, $rec->mirror);
 
         }
 
@@ -97,7 +102,7 @@ sub data {
 
 sub search {
     my $self = shift;
-    my $p = $self->validate_params(\@_, {
+    my $p = validate_params(\@_, {
         -criteria => { optional => 1, default => {}, type => HASHREF },
         -options  => { optional => 1, default => {}, type => HASHREF },
     });
@@ -120,9 +125,10 @@ sub load {
         -url          => $self->url,
     );
 
+    $mirrors->load();
     $mirrors->parse(sub {
         my $data = shift;
-        $data->{datetime} = dt2db($dt);
+        $data->{'datetime'} = dt2db($dt);
         push(@datum, $data);
     });
 
@@ -134,7 +140,7 @@ sub load {
 
 sub clear {
     my $self = shift;
-    my $p = $self->validate_params(\@_, {
+    my $p = validate_params(\@_, {
         -criteria => { optional => 1, default => {}, type => HASHREF },
     });
 
@@ -146,7 +152,7 @@ sub clear {
 
 sub count {
     my $self = shift;
-    my $p = $self->validate_params(\@_, {
+    my $p = validate_params(\@_, {
         -criteria => { optional => 1, default => {}, type => HASHREF },
     });
 

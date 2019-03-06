@@ -11,7 +11,7 @@ use XAS::Class
   debug     => 0,
   version   => $VERSION,
   base      => 'XAS::Darkpan::Process::Base',
-  utils     => 'dotid',
+  utils     => 'dotid :validation',
   accessors => 'database',
   vars => {
     PARAMS => {
@@ -26,7 +26,7 @@ use XAS::Class
 
 sub create {
     my $self = shift;
-    my ($mirror) = $self->validate_params(\@_, [
+    my ($mirror) = validate_params(\@_, [
         { optional => 1, default => $self->mirror, isa => 'Badger::URL' },
     ]);
 
@@ -39,7 +39,7 @@ sub create {
         -options  => { order_by => 'pauseid' },
     );
 
-    if ($self->lockmgr->lock_directory($self->path)) {
+    if ($self->lockmgr->lock($self->path)) {
 
         unless ($fh = IO::Zlib->new($file->path, 'wb')) {
 
@@ -53,12 +53,13 @@ sub create {
 
         foreach my $author (@$authors) {
 
-            $fh->printf("%s\n", $author->to_string);
+            $fh->print(sprintf("%s\n", $author->to_string));
 
         }
 
         $fh->close();
-        $self->lockmgr->unlock_directory($self->root);
+
+        $self->lockmgr->unlock($self->path);
 
     } else {
 
@@ -76,8 +77,8 @@ sub create {
 
 sub inject {
     my $self = shift;
-    my $p = $self->validate_params(\@_, {
-       -pauseid  => 1,
+    my $p = validate_params(\@_, {
+       -pause_id => 1,
        -name     => 1,
        -email    => 1,
        -mirror   => { optional => 1, default => $self->mirror, isa => 'Badger::URL' },
@@ -87,7 +88,7 @@ sub inject {
 
     my $name    = $p->{'name'};
     my $email   = $p->{'email'};
-    my $pauseid = $p->{'pauseid'};
+    my $pauseid = $p->{'pause_id'};
     my $mirror  = $p->{'mirror'}->service;
 
     $self->database->add(
@@ -113,11 +114,13 @@ sub init {
 
     $authors->path('/authors/01mailrc.txt.gz');
 
-    $self->{database} = XAS::Darkpan::DB::Authors->new(
+    $self->{'database'} = XAS::Darkpan::DB::Authors->new(
         -schema => $self->schema,
         -url    => $authors,
     );
 
+    $self->lockmgr->add(-key => $self->path);
+    
     return $self;
 
 }

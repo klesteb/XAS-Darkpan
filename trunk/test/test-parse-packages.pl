@@ -1,4 +1,5 @@
 use lib '../lib';
+use lib '/home/kevin/dev/XAS/trunk/lib';
 
 use strict;
 use warnings;

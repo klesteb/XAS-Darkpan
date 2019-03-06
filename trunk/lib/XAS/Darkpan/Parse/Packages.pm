@@ -11,6 +11,7 @@ use XAS::Class
   version   => $VERSION,
   base      => 'XAS::Darkpan::Base',
   accessors => 'data meta',
+  utils     => ':validation',
   vars => {
     PARAMS => {
       -url => { optional => 1, isa => 'Badger::URL', default => Badger::URL->new('http://www.cpan.org/modules/02packages.details.txt.gz') },
@@ -24,13 +25,22 @@ use XAS::Class
 # Public Methods
 # ----------------------------------------------------------------------
 
+sub load {
+    my $self = shift;
+    
+    my $content = $self->fetch($self->url);
+
+    $self->{'data'} = $self->_gzip_unpack($content);
+    
+}
+
 sub parse {
     my $self = shift;
-    my ($callback) = $self->validate_params(\@_, [
+    my ($callback) = validate_params(\@_, [
         { type => CODEREF },
     ]);
 
-    my @lines = split("\n", $self->{data});
+    my @lines = split("\n", $self->{'data'});
     my @meta  = splice(@lines, 0, 9);
 
     foreach my $m (@meta) {
@@ -39,7 +49,7 @@ sub parse {
 
         my ($name, $value) = $m =~ /^(.*):\s*(.*)/;
 
-        $self->{meta}->{$name} = $value;
+        $self->{'meta'}->{$name} = $value;
 
     }
 
@@ -60,18 +70,6 @@ sub parse {
 # ----------------------------------------------------------------------
 # Private Methods
 # ----------------------------------------------------------------------
-
-sub init {
-    my $class = shift;
-
-    my $self = $class->SUPER::init(@_);
-    my $content = $self->fetch($self->url);
-
-    $self->{data} = $self->_gzip_unpack($content);
-
-    return $self;
-
-}
 
 1;
 

@@ -12,6 +12,7 @@ use XAS::Class
   version   => $VERSION,
   base      => 'XAS::Darkpan::Base',
   accessors => 'data meta',
+  utils     => ':validation',
   vars => {
     PARAMS => {
       -url => { optional => 1, isa => 'Badger::URL', default => Badger::URL->new('http://www.cpan.org/authors/RECENT.recent') },
@@ -25,15 +26,24 @@ use XAS::Class
 # Public Methods
 # ----------------------------------------------------------------------
 
+sub load {
+    my $self = shift;
+    
+    my $content = $self->fetch($self->url);
+
+    $self->{'data'} = Load($content);
+    
+}
+
 sub parse {
     my $self = shift;
-    my ($callback) = $self->validate_params(\@_, [
+    my ($callback) = validate_params(\@_, [
         { type => CODEREF }
     ]);
 
-    $self->{meta} = $self->{data}->{meta};
+    $self->{'meta'} = $self->{'data'}->{'meta'};
 
-    foreach my $item (@{$self->{data}->{recent}}) {
+    foreach my $item (@{$self->{'data'}->{'recent'}}) {
 
         $callback->($item);
 
@@ -44,18 +54,6 @@ sub parse {
 # ----------------------------------------------------------------------
 # Private Methods
 # ----------------------------------------------------------------------
-
-sub init {
-    my $class = shift;
-
-    my $self = $class->SUPER::init(@_);
-    my $content = $self->fetch($self->url);
-
-    $self->{data} = Load($content);
-
-    return $self;
-
-}
 
 1;
 

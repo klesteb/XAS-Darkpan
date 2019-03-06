@@ -19,7 +19,7 @@ use XAS::Class
   debug   => 0,
   version => $VERSION,
   base    => 'XAS::Darkpan::DB::Base',
-  utils   => 'dt2db',
+  utils   => 'dt2db :validation',
   vars => {
     PARAMS => {
       -url => { optional => 1, isa => 'Badger::URL', default => Badger::URL->new('http://www.cpan.org/modules/02packages.details.txt.gz') },
@@ -27,7 +27,7 @@ use XAS::Class
   }
 ;
 
-#use Data::Dumper;
+use Data::Dumper;
 
 # ----------------------------------------------------------------------
 # Public Methods
@@ -35,7 +35,7 @@ use XAS::Class
 
 sub remove {
     my $self = shift;
-    my ($package, $version) = $self->validate_params(\@_, [1,1]);
+    my ($package, $version) = validate_params(\@_, [1,1]);
 
     my $schema = $self->schema;
     my $criteria = {
@@ -49,16 +49,18 @@ sub remove {
 
 sub add {
     my $self = shift;
-    my $p = $self->validate_params(\@_, {
+    my $p = validate_params(\@_, {
        -path   => 1,
        -mirror => 1,
     });
 
+    my $results;
     my $criteria;
     my $schema = $self->schema;
     my $dt = DateTime->now(time_zone => 'local');
     my $info = CPAN::DistnameInfo->new($p->{'path'});
-    my ($package) = $info->dist =~ s/-/::/;
+    my $dist = $info->dist;
+    my $package = ($dist =~ /::/) ? $dist =~ s/-/::/ : $dist;
 
     my $data = {      
         package   => $package,
@@ -69,23 +71,19 @@ sub add {
         pauseid   => $info->cpanid    || 'unknown',
         extension => $info->extension,
         pathname  => $info->pathname,
-        mirror    => $self->url->server,
+        mirror    => $p->{'mirror'},
         datetime  => dt2db($dt),
     };
 
-    $schema->txn_do(sub {
-
-        Packages->create($schema, $data); 
-
-    });
+    return Packages->create_record($schema, $data); 
 
 }
 
 sub data {
     my $self = shift;
-    my $p = $self->validate_params(\@_, {
-       -criteria => { optional => 1, type => HASHREF, default => { location => 'all'} },
-       -options  => { optional => 1, type => HASHREF, default => { order_by => 'packages', prefetch => ['provides','requires']} },
+    my $p = validate_params(\@_, {
+       -criteria => { optional => 1, type => HASHREF, default => { mirror => 'http://www.cpan.org' } },
+       -options  => { optional => 1, type => HASHREF, default => { order_by => 'package', prefetch => ['provides','requires']} },
     });
 
     my @datum = ();
@@ -98,7 +96,7 @@ sub data {
             push(@datum, XAS::Lib::Darkpan::Package->new(
                 -name    => $rec->provides->module,
                 -version => $rec->provides->version,
-                -path    => $rec->packages->pathname
+                -path    => $rec->pathname
             ));
 
         }
@@ -111,7 +109,7 @@ sub data {
 
 sub search {
     my $self = shift;
-    my $p = $self->validate_params(\@_, {
+    my $p = validate_params(\@_, {
        -criteria => { optional => 1, type => HASHREF, default => {} },
        -options  => { optional => 1, type => HASHREF, default => {} },
     });
@@ -135,10 +133,11 @@ sub load {
         -url          => $self->url,
     );
 
+    $packages->load();
     $packages->parse(sub {
         my $data = shift;
 
-        my $info = CPAN::DistnameInfo->new($data->{path});
+        my $info = CPAN::DistnameInfo->new($data->{'path'});
 
     	return unless ($info->distvname);
 
@@ -191,7 +190,7 @@ sub load {
 
 sub clear {
     my $self = shift;
-    my $p = $self->validate_params(\@_, {
+    my $p = validate_params(\@_, {
         -criteria => { optional => 1, default => {}, type => HASHREF },
     });
 
@@ -203,7 +202,7 @@ sub clear {
 
 sub count {
     my $self = shift;
-    my $p = $self->validate_params(\@_, {
+    my $p = validate_params(\@_, {
         -criteria => { optional => 1, default => {}, type => HASHREF },
     });
 

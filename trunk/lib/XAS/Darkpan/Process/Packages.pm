@@ -22,7 +22,7 @@ use XAS::Class
   version => $VERSION,
   base    => 'XAS::Darkpan::Process::Base',
   mixin   => 'XAS::Lib::Mixins::Handlers',
-  utils   => 'dotid left dt2db',
+  utils   => 'dotid left dt2db :validation',
   vars => {
     PARAMS => {
       -path => { optional => 1, isa => 'Badger::Filesystem::Directory', default => Dir('/srv/dpan/authors/id') },
@@ -45,6 +45,7 @@ my $ZIP      = qr/\.zip$/;
 my $xVERSION = qr/\$(?:\w+::)*VERSION/;
 my $xISA     = qr/\@ISA/;
 my $PRAGMAS  = qr/constant|diagnostics|integer|sigtrap|strict|subs|warnings|sort/;
+my $LOCK     = qr/\.lock$/;
 
 # ----------------------------------------------------------------------
 # Public Methods
@@ -52,15 +53,17 @@ my $PRAGMAS  = qr/constant|diagnostics|integer|sigtrap|strict|subs|warnings|sort
 
 sub create {
     my $self = shift;
-    my ($mirror) = $self->validate_params(\@_, [
-        { optional => 1, default => $self->mirror, isa => 'Badger::URL' },
-    ]);
+    my $p = validate_params(\@_, {
+        -mirror => { optional => 1, isa => 'Badger::URL', default => $self->mirror },
+    });
 
+    my $mirror = $p->{'mirror'};
+    
     $mirror->path('/modules/02packages.details.txt.gz');
 
     my $fh;
     my $criteria = {
-        mirror => $mirror->service
+        mirror => $mirror->server
     };
     my $module   = $self->class;
     my $program  = $self->env->script;
@@ -70,10 +73,10 @@ sub create {
     my $packages = $self->database->data(-criteria => $criteria);
     my $count    = $self->database->count(-criteria => $criteria) + 9;
     my $path     = $mirror->url;
-
+    
     $self->log->debug('entering create()');
 
-    if ($self->lockmgr->lock_directory($self->path)) {
+    if ($self->lockmgr->lock($self->path)) {
 
         unless ($fh = IO::Zlib->new($file->path, 'wb')) {
 
@@ -99,13 +102,13 @@ __HEADER
 
         foreach my $package (@$packages) {
 
-            $fh->printf("%s\n", $package->to_string);
+            $fh->print(sprintf("%s\n", $package->to_string));
 
         }
 
         $fh->close();
 
-        $self->lockmgr->unlock_directory($self->path);
+        $self->lockmgr->unlock($self->path);
 
     } else {
 
@@ -123,13 +126,24 @@ __HEADER
 
 sub inject {
     my $self = shift;
-    my $p = $self->validate_params(\@_, {
-        -path   => 1,
-        -mirror => { optional => 1, isa => 'Badger::URL', default => $self->mirror },
+    my $p = validate_params(\@_, {
+        -pause_id => 1,
+        -package  => 1,
+        -mirror   => { optional => 1, isa => 'Badger::URL', default => $self->mirror },
+        -source   => { optional => 1, isa => 'Badger::Filesystem::Directory', default => $self->path },
     });
 
+    my @parts;
+    my $source   = $p->{'source'};
+    my $pause_id = $p->{'pause_id'};
+    my $package  = $p->{'package'};
+    
+    $parts[1] = left($pause_id, 1);
+    $parts[2] = left($pause_id, 2);
+    $parts[3] = $pause_id;
+
     $self->database->add(
-        -path   => $p->{'path'},
+        -path   => Dir($source, @parts, $package)->path,
         -mirror => $p->{'mirror'}->service,
     );
 
@@ -137,15 +151,15 @@ sub inject {
 
 sub process {
     my $self = shift;
-    my $p = $self->validate_params(\@_, {
-       -pauseid     => 1,
+    my $p = validate_params(\@_, {
+       -pause_id    => 1,
        -package_id  => 1,
 	   -url         => { isa => 'Badger::URL', },
        -destination => { isa => 'Badger::Filesystem::Directory' },
     });
 
     my $url         = $p->{'url'};
-    my $pauseid     = $p->{'pauseid'};
+    my $pause_id    = $p->{'pause_id'};
     my $package_id  = $p->{'package_id'};
     my $destination = $p->{'destination'};
 
@@ -153,32 +167,37 @@ sub process {
     my $lock;
     my @parts;
 
-    $self->log->debug('entering inject()');
+    $self->log->debug('entering process()');
 
     $parts[0] = $destination;
-    $parts[1] = left($pauseid, 1);
-    $parts[2] = left($pauseid, 2);
-    $parts[3] = $pauseid;
+    $parts[1] = left($pause_id, 1);
+    $parts[2] = left($pause_id, 2);
+    $parts[3] = $pause_id;
     $parts[4] = File($url->path)->name;
 
     $file = File(@parts);
     $lock = $file->directory;
-    $lock->create unless ($lock->exists);
 
-    if ($self->lockmgr->lock_directory($lock)) {
+    $self->lockmgr->add(-key => $lock);
+    
+    if ($self->lockmgr->lock($lock)) {
 
         if ($self->_copy_archive($url, $file)) {
+
+            $self->log->info(sprintf('copied: %s, to %s', $url, $file));
 
             $self->_load_archive($file, $package_id);
             $self->_checksum($file->directory);
 
         }
 
-        $self->lockmgr->unlock_directory($lock);
+        $self->lockmgr->unlock($lock);
 
     }
 
-    $self->log->debug('leaving inject()');
+    $self->lockmgr->remove($lock);
+
+    $self->log->debug('leaving process()');
 
 }
 
@@ -188,7 +207,7 @@ sub process {
 
 sub _copy_archive {
     my $self = shift;
-    my ($url, $file) = $self->validate_params(\@_, [
+    my ($url, $file) = validate_params(\@_, [
 	   { isa => 'Badger::URL' },
        { isa => 'Badger::Filesystem::File' },
     ]);
@@ -199,12 +218,24 @@ sub _copy_archive {
 
     unless ($file->exists) {
 
-        $self->log->info(sprintf('copying: %s, to %s', $url, $file));
-
+        my $bytes = 0;
         my $contents = $self->fetch($url);
+        my $length = length($contents);
         my $fh = $file->open('w');
 
-        $fh->write($contents);
+        $fh->clearerr;
+
+        if ($fh->syswrite($contents, $length) != $length) {
+
+            $self->throw_msg(
+                dotid($self->class) . '.copy_archive.ioerror',
+                'ioerror',
+                $fh->error
+            );
+
+        }
+
+        $fh->flush;
         $fh->close;
 
         $stat = 1;
@@ -219,7 +250,7 @@ sub _copy_archive {
 
 sub _load_archive {
     my $self = shift;
-    my ($file, $package_id) = $self->validate_params(\@_, [1,1]);
+    my ($file, $package_id) = validate_params(\@_, [1,1]);
 
     my $hash   = {}; # this will be normalized
     my $schema = $self->schema;
@@ -293,7 +324,7 @@ sub _load_archive {
                 my $rec = {
                     package_id => $package_id,
                     module     => $key,
-                    version    => $value->{'version'},
+                    version    => $value->{'version'} || '0.0',
                     pathname   => $value->{'pathname'},
                     datetime   => dt2db($dt),
                 };
@@ -311,7 +342,7 @@ sub _load_archive {
                 my $rec = {
                     package_id => $package_id,
                     module     => $key,
-                    version    => $value->{'version'},
+                    version    => $value->{'version'} || '0.0',
                     phase      => $value->{'phase'},
                     relation   => $value->{'relation'},
                     datetime   => dt2db($dt),
@@ -333,13 +364,13 @@ sub _load_archive {
 
 sub _checksum {
     my $self = shift;
-    my ($directory) = $self->validate_params(\@_, [
+    my ($directory) = validate_params(\@_, [
         { isa => 'Badger::Filesystem::Directory' },
     ]);
 
     $self->log->debug('entering _checksum()');
 
-    $CPAN::Checksums::IGNORE_MATCH = 'locked.lck';
+    $CPAN::Checksums::IGNORE_MATCH = $LOCK;
     CPAN::Checksums::updatedir($directory->path);
 
     $self->log->debug('leaving _checksum()');
@@ -396,7 +427,7 @@ sub _load_meta {
 
 sub _package_at_usual_location {   
     my $self = shift;
-    my ($file) = $self->validate_params(\@_, [1]);
+    my ($file) = validate_params(\@_, [1]);
 
     my ($top, $subdir, @rest) = splitdir($file);
     defined $subdir or return 0;
@@ -409,7 +440,7 @@ sub _package_at_usual_location {
 
 sub _inspect_tar_archive {
     my $self = shift;
-    my $p = $self->validate_params(\@_, {
+    my $p = validate_params(\@_, {
         -filename => { isa => 'Badger::Filesystem::File' },
         -hash     => { type => HASHREF },
         -filter => { callbacks => {
@@ -448,7 +479,7 @@ sub _inspect_tar_archive {
         $self->throw_msg(
             dotid($self->class) . '.inspect_tar_archive.nofiles',
             'nofiles',
-            $arc->error
+            Archive::Tar->error()
         );
 
     }
@@ -459,7 +490,7 @@ sub _inspect_tar_archive {
 
 sub _inspect_zip_archive {
     my $self = shift;
-    my $p = $self->validate_params(\@_, {
+    my $p = validate_params(\@_, {
         -filename => { isa => 'Badger::Filesystem::File' },
         -hash     => { type => HASHREF },
         -filter => { callbacks => {
@@ -1216,6 +1247,8 @@ sub init {
         -url    => $packages,
     );
 
+    $self->lockmgr->add(-key => $self->path);
+    
     return $self;
 
 }

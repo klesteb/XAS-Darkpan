@@ -1,4 +1,5 @@
 use lib '../lib';
+use lib '/home/kevin/dev/XAS/trunk/lib';
 
 use strict;
 use warnings;
@@ -10,9 +11,9 @@ my $authors = XAS::Darkpan::Parse::Authors->new();
 $authors->parse(sub {
     my $author = shift;
 
-    printf("name:   %s\n", $author->{name});
-    printf("cpanid: %s\n", $author->{pauseid});
-    printf("email:  %s\n", $author->{email});
+    printf("name:   %s\n", $author->{'name'});
+    printf("cpanid: %s\n", $author->{'pauseid'});
+    printf("email:  %s\n", $author->{'email'});
 
 });
 

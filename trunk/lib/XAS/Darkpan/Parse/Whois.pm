@@ -12,6 +12,7 @@ use XAS::Class
   version   => $VERSION,
   base      => 'XAS::Darkpan::Base',
   accessors => 'data xml',
+  utils     => ':validation',
   vars => {
     PARAMS => {
       -url => { optional => 1, isa => 'Badger::URL', default => Badger::URL->new('http://www.cpan.org/authors/00whois.xml') },
@@ -25,9 +26,18 @@ use XAS::Class
 # Public Methods
 # ----------------------------------------------------------------------
 
+sub load {
+    my $self = shift;
+    
+    $self->{'data'} = $self->fetch($self->url);
+
+    $self->xml->load($self->{'data'});
+    
+}
+
 sub parse {
     my $self = shift;
-    my ($callback) = $self->validate_params(\@_, [
+    my ($callback) = validate_params(\@_, [
         { type => CODEREF }
     ]);
 
@@ -70,10 +80,7 @@ sub init {
 
     XAS::Lib::XML->xmlerr('');
 
-    $self->{xml}  = XAS::Lib::XML->new();
-    $self->{data} = $self->fetch($self->url);
-
-    $self->xml->load($self->{data});
+    $self->{'xml'}  = XAS::Lib::XML->new();
 
     return $self;
 
