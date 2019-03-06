@@ -19,7 +19,7 @@ use XAS::Class
   debug   => 0,
   version => $VERSION,
   base    => 'XAS::Darkpan::DB::Base',
-  utils   => 'dt2db :validation',
+  utils   => 'dt2db :validation left',
   vars => {
     PARAMS => {
       -url => { optional => 1, isa => 'Badger::URL', default => Badger::URL->new('http://www.cpan.org/modules/02packages.details.txt.gz') },
@@ -83,9 +83,11 @@ sub data {
     my $self = shift;
     my $p = validate_params(\@_, {
        -criteria => { optional => 1, type => HASHREF, default => { mirror => 'http://www.cpan.org' } },
-       -options  => { optional => 1, type => HASHREF, default => { order_by => 'package', prefetch => ['provides','requires']} },
+       -options  => { optional => 1, type => HASHREF, default => { order_by => 'package' } },
     });
 
+    my $path;
+    my @parts = ();
     my @datum = ();
     my $schema = $self->schema;
 
@@ -93,11 +95,26 @@ sub data {
 
         while (my $rec = $rs->next) {
 
-            push(@datum, XAS::Lib::Darkpan::Package->new(
-                -name    => $rec->provides->module,
-                -version => $rec->provides->version,
-                -path    => $rec->pathname
-            ));
+            $parts[0] = left($rec->pauseid, 1);
+            $parts[1] = left($rec->pauseid, 2);
+            $parts[2] = $rec->pauseid;
+            $parts[3] = $rec->filename;
+            
+            $path = join('/', @parts);
+
+            if (my $provides = $rec->search_related('provides')) {
+                
+                while (my $provide = $provides->next) {
+                                        
+                    push(@datum, XAS::Darkpan::Lib::Package->new(
+                        -name    => $provide->module,
+                        -version => $provide->version,
+                        -path    => $path,
+                    ));
+                    
+                }
+
+            }
 
         }
 

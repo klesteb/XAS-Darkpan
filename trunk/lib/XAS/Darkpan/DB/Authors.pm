@@ -52,6 +52,7 @@ sub add {
         -pauseid => 1,
         -name    => 1,
         -email   => 1,
+        -mirror  => 1,
     });
 
     my $results;

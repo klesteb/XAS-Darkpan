@@ -21,6 +21,12 @@ use XAS::Class
 ;
 
 # ----------------------------------------------------------------------
+# Compiled regex's
+# ----------------------------------------------------------------------
+
+my $TYPES = qr/master|mirror/;
+
+# ----------------------------------------------------------------------
 # Public Methods
 # ----------------------------------------------------------------------
 
@@ -68,7 +74,7 @@ sub inject {
     my $self = shift;
     my $p = validate_params(\@_, {
         -url  => { isa => 'Badger::URL' },
-        -type => { optional => default => 'mirror', regex => qr/master|mirror/ },
+        -type => { optional => 1, default => 'mirror', regex => $TYPES },
     });
 
     $self->database->add(

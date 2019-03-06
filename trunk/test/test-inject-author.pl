@@ -7,19 +7,24 @@ use warnings;
 
 use Badger::URL 'URL';
 use Badger::Filesystem 'Dir';
-  
+
 use XAS::Lib::Lockmgr;
 use XAS::Model::Schema;
-use XAS::Darkpan::Process::Mirrors;
+use XAS::Darkpan::Process::Authors;
 
 my $lockmgr = XAS::Lib::Lockmgr->new();
 my $schema = XAS::Model::Schema->opendb('darkpan');
-my $mirrors = XAS::Darkpan::Process::Mirrors->new(
+my $authors = XAS::Darkpan::Process::Authors->new(
     -schema  => $schema,
     -lockmgr => $lockmgr,
-    -path    => Dir('/var/lib/xas/darkpan/modules'),
-    -mirror  => URL('http://localhost')
 );
 
-$mirrors->create();
+$authors->log->level('debug', 1);
+
+my $rec = $authors->inject(
+    -pause_id => 'kesteb',
+    -name     => 'Kevin L. Esteb',
+    -email    => 'kevin@kesteb.us',
+    -mirror   => URL('http://localhost')
+);
 

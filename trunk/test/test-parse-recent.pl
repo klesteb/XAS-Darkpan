@@ -18,5 +18,6 @@ sub store {
 
 my $recent = XAS::Darkpan::Parse::Recent->new();
 
+$recent->load();
 $recent->parse(\&store);
 

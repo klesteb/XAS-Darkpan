@@ -8,6 +8,8 @@ use XAS::Darkpan::Parse::Mirrors;
 
 my $mirrors = XAS::Darkpan::Parse::Mirrors->new();
 
+$mirrors->load();
+
 $mirrors->parse(sub {
     my $data = shift;
 

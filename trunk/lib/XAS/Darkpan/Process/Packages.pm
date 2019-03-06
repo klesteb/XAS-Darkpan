@@ -135,12 +135,12 @@ sub inject {
 
     my @parts;
     my $source   = $p->{'source'};
-    my $pause_id = $p->{'pause_id'};
+    my $pause_id = uc($p->{'pause_id'});
     my $package  = $p->{'package'};
     
-    $parts[1] = left($pause_id, 1);
-    $parts[2] = left($pause_id, 2);
-    $parts[3] = $pause_id;
+    $parts[0] = left($pause_id, 1);
+    $parts[1] = left($pause_id, 2);
+    $parts[2] = $pause_id;
 
     $self->database->add(
         -path   => Dir($source, @parts, $package)->path,
@@ -159,7 +159,7 @@ sub process {
     });
 
     my $url         = $p->{'url'};
-    my $pause_id    = $p->{'pause_id'};
+    my $pause_id    = uc($p->{'pause_id'});
     my $package_id  = $p->{'package_id'};
     my $destination = $p->{'destination'};
 

@@ -16,5 +16,6 @@ sub whois {
 
 my $whois = XAS::Darkpan::Parse::Whois->new();
 
+$whois->load();
 $whois->parse(\&whois);
 

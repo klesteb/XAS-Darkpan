@@ -88,7 +88,7 @@ sub inject {
 
     my $name    = $p->{'name'};
     my $email   = $p->{'email'};
-    my $pauseid = $p->{'pause_id'};
+    my $pauseid = uc($p->{'pause_id'});
     my $mirror  = $p->{'mirror'}->service;
 
     $self->database->add(

@@ -8,6 +8,7 @@ use XAS::Darkpan::Parse::Authors;
 
 my $authors = XAS::Darkpan::Parse::Authors->new();
 
+$authors->load();
 $authors->parse(sub {
     my $author = shift;
 
