@@ -49,7 +49,7 @@ __PACKAGE__->add_columns(
 );
 
 __PACKAGE__->set_primary_key('id');
-__PACKAGE__->add_unique_constraint(authors_pauseid_idx => ['pauseid','mirror']);
+__PACKAGE__->add_unique_constraint(authors_pauseid_mirror_idx => ['pauseid','mirror']);
 
 __PACKAGE__->optimistic_locking_strategy('version');
 __PACKAGE__->optimistic_locking_version_column('revision');
