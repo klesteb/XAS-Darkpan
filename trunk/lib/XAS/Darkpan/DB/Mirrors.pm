@@ -76,12 +76,12 @@ sub data {
 
     my $schema = $self->schema;
     my $json   = JSON::XS->new->pretty->utf8();
-    my $dt     = DateTime->now(time_zone => 'UTC');
+    my $dt     = DateTime->now(time_zone => 'GMT');
     my $master = Mirrors->find($schema, { type => 'master' });
 
     my $mirrors = {
         master    => $master->mirror,
-        timestamp => $dt->strftime('%Y-%m-%dT%l:%M:%S%z'),
+        timestamp => $dt->strftime('%Y-%m-%dT%d:%M:%S%z'),
         version   => '1.0',
         name      => 'Comprehensive Perl Archive Network',
     };

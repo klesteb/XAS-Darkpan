@@ -30,21 +30,12 @@ sub create {
 
     $self->log->debug('entering create()');
 
-    my $fh;
     my $mirrors = $self->database->data();
     my $file = File($self->path, '07mirror.json');
 
     if ($self->lockmgr->lock($self->path)) {
 
-        unless ($fh = IO::Zlib->new($file->path, 'wb')) {
-
-            $self->throw_msg(
-                dotid($self->class) . '.create.nocreate',
-                'nocreate',
-                $file->path
-             );
-
-        }
+        my $fh = $file->open('w');
 
         $fh->print($mirrors);
         $fh->close();

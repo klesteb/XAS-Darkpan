@@ -51,9 +51,9 @@ sub add {
     my $self = shift;
     my $p = validate_params(\@_, {
         -pauseid => 1,
-        -module   => 1,
-        -perms    => 1,
-        -mirror   => { optional => 1, default => 'http://www.cpan.org' },
+        -module  => 1,
+        -perms   => 1,
+        -mirror  => { optional => 1, default => 'http://www.cpan.org' },
     });
 
     my $schema = $self->schema;
@@ -79,7 +79,7 @@ sub data {
 
         while (my $rec = $rs->next) {
 
-            push(@datum, XAS::Darkpan::Lib::Perms->new(
+            push(@datum, XAS::Darkpan::Lib::Permission->new(
                 -pauseid => $rec->pauseid,
                 -module  => $rec->module,
                 -perms   => $rec->perms,

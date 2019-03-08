@@ -23,7 +23,7 @@ use XAS::Class
 sub to_string {
     my $self = shift;
 
-    return sprintf('alias %-10s "%s <%s>"', $self->module, $self->pauseid, $self->perms);
+    return sprintf("%s,%s,%s", $self->module, $self->pauseid, $self->perms);
 
 }
 

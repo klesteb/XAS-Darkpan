@@ -3,6 +3,7 @@ package XAS::Darkpan::Process::Permissions;
 our $VERSION = '0.01';
 
 use IO::Zlib;
+use XAS::Darkpan;
 use Badger::URL 'URL';
 use XAS::Darkpan::DB::Permissions;
 use Badger::Filesystem 'Dir File';
@@ -40,7 +41,7 @@ sub create {
     my $module  = $self->class;
     my $program = $self->env->script;
     my $dt      = DateTime->now(time_zone => 'GMT');
-    my $date    = $dt->strftime('%a, %e %b %y %T %Z');
+    my $date    = $dt->strftime('%a, %d %b %Y %T %Z');
     my $file    = File($self->path, '06perms.txt.gz');
     my $perms   = $self->database->data(-criteria => $criteria);
     my $count   = $self->database->count(-criteria => $criteria) + 9;
@@ -62,10 +63,10 @@ File:         06perms.txt
 Description:  CSV file of upload permission to the CPAN per namespace
     best-permission is one of "m" for "modulelist", "f" for
     "first-come", "c" for "co-maint"    
-Columns:      package, userid,best-permission
+Columns:      package,userid,best-permission
 Intended-For: private CPAN
 Line-Count:   $count
-Written-By:   $program with $module $XAS::Darkpan::VERSION (full)
+Written-By:   XAS Darkpan version $XAS::Darkpan::VERSION
 Date:         $date
 
 __HEADER
