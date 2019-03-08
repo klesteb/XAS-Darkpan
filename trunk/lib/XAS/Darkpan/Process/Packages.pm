@@ -23,11 +23,6 @@ use XAS::Class
   base    => 'XAS::Darkpan::Process::Base',
   mixin   => 'XAS::Lib::Mixins::Handlers',
   utils   => 'dotid left dt2db :validation',
-  vars => {
-    PARAMS => {
-      -path => { optional => 1, isa => 'Badger::Filesystem::Directory', default => Dir('/srv/dpan/authors/id') },
-    }
-  }
 ;
 
 #use PPI::Dumper;
@@ -53,26 +48,19 @@ my $LOCK     = qr/\.lock$/;
 
 sub create {
     my $self = shift;
-    my $p = validate_params(\@_, {
-        -mirror => { optional => 1, isa => 'Badger::URL', default => $self->mirror },
-    });
-
-    my $mirror = $p->{'mirror'};
     
-    $mirror->path('/modules/02packages.details.txt.gz');
-
     my $fh;
     my $criteria = {
-        mirror => $mirror->server
+        mirror => $self->mirror->server
     };
     my $module   = $self->class;
     my $program  = $self->env->script;
+    my $path     = $self->mirror->url;
     my $dt       = DateTime->now(time_zone => 'GMT');
     my $date     = $dt->strftime('%a %b %d %H:%M:%S %Y %Z');
-    my $file     = File($self->path, '02packages.details.txt.gz');
     my $packages = $self->database->data(-criteria => $criteria);
+    my $file     = File($self->path, '02packages.details.txt.gz');
     my $count    = $self->database->count(-criteria => $criteria) + 9;
-    my $path     = $mirror->url;
     
     $self->log->debug('entering create()');
 
@@ -1238,13 +1226,12 @@ sub init {
     my $class = shift;
 
     my $self = $class->SUPER::init(@_);
-    my $packages = $self->mirror->copy();
 
-    $packages->path('/modules/02packages.details.txt.gz');
+    $self->mirror->path('/modules/02packages.details.txt.gz');
 
     $self->{'database'} = XAS::Darkpan::DB::Packages->new(
         -schema => $self->schema,
-        -url    => $packages,
+        -url    => $self->mirror,
     );
 
     $self->lockmgr->add(-key => $self->path);

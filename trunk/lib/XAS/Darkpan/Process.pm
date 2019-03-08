@@ -2,25 +2,26 @@ package XAS::Darkpan::Process;
 
 our $VERSION = '0.01';
 
-use Badger::URL;
+use Badger::URL 'URL';
 use Badger::Filesystem 'Dir';
 
 use XAS::Lib::Lockmgr;
 use XAS::Darkpan::Process::Authors;
 use XAS::Darkpan::Process::Mirrors;
 use XAS::Darkpan::Process::Packages;
+use XAS::Darkpan::Process::Permissions;
 
 use XAS::Class
   debug     => 0,
   version   => $VERSION,
   base      => 'XAS::Base',
-  accessors => 'packages authors mirrors lockmgr',
+  accessors => 'packages authors mirrors lockmgr permissions',
   utils     => 'dotid',
   vars => {
     PARAMS => {
-      -schema     => 1,
-      -root       => { optional => 1, isa => 'Badger::Filesystem::Directory', default => Dir('/srv/dpan') },
-      -repository => { optional => 1, isa => 'Badger::URL', default => Badger::URL->new('http://www.cpan.org') },
+      -schema => 1,
+      -root   => { optional => 1, isa => 'Badger::Filesystem::Directory', default => Dir('/var/lib/xas/darkpan') },
+      -mirror => { optional => 1, isa => 'Badger::URL', default => URL('http://www.cpan.org') },
     }
   }
 ;
@@ -87,7 +88,7 @@ sub create_authors {
 
 }
 
-sub mirror {
+sub sync {
     my $self = shift;
 
     my $root = $self->root->path;
@@ -95,7 +96,7 @@ sub mirror {
     my $destination = Dir($root, $auth_id);
 
     my $criteria = {
-        mirror => $self->repository->service
+        mirror => $self->mirror->service
     };
 
     my $options = {
@@ -180,6 +181,18 @@ sub load_packages {
     
 }
 
+sub load_permissions {
+    my $self = shift;
+    
+    $self->log->debug('entering load_permissions()');
+
+    $self->permissions->load();
+    $self->log->info('loaded perms');
+
+    $self->log->debug('leaving load_permissions()');
+
+}
+
 sub clear_database {
     my $self = shift;
 
@@ -193,6 +206,9 @@ sub clear_database {
 
     $self->packages->clear();
     $self->log->info('cleared packages');
+
+    $self->permissions->clear();
+    $self->log->info('cleared permissions');
 
     $self->log->debug('leaving clear_database()');
 
@@ -213,22 +229,29 @@ sub init {
     $self->{'authors'} = XAS::Darkpan::Process::Authors->new(
         -schema  => $self->schema,
         -lockmgr => $self->lockmgr,
-        -path    => Dir($root, 'authors'),
-        -mirror  => $self->repository->copy()
+        -path    => Dir($root, 'authors', 'id'),
+        -mirror  => $self->mirror->copy()
     );
 
     $self->{'mirrors'} = XAS::Darkpan::Process::Mirrors->new(
         -schema  => $self->schema,
         -lockmgr => $self->lockmgr,
         -path    => Dir($root, 'modules'),
-        -mirror  => $self->repository->copy()
+        -mirror  => $self->mirror->copy()
     );
 
     $self->{'packages'} = XAS::Darkpan::Process::Packages->new(
         -schema  => $self->schema,
         -lockmgr => $self->lockmgr,
-        -path    => Dir($root, 'authors/id'),
-        -mirror  => $self->repository->copy()
+        -path    => Dir($root, 'authors', 'id'),
+        -mirror  => $self->mirror->copy()
+    );
+
+    $self->{'permissions'} = XAS::Darkpan::Process::Permissions->new(
+        -schema  => $self->schema,
+        -lockmgr => $self->lockmgr,
+        -path    => Dir($root, 'modules'),
+        -mirror  => $self->mirror->copy()
     );
 
     return $self;

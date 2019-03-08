@@ -13,7 +13,8 @@ use XAS::Class
     PARAMS => {
       -schema  => 1,
       -lockmgr => 1,
-      -mirror  => { optional => 1, isa => 'Badger::URL', default => Badger::URL->new('http://www.cpan.org') },
+      -mirror  => { isa => 'Badger::URL' },
+      -path    => { isa => 'Badger::Filesystem::Directory' },
     }
   }
 ;

@@ -8,16 +8,10 @@ use XAS::Darkpan::DB::Authors;
 use Badger::Filesystem 'Dir File';
 
 use XAS::Class
-  debug     => 0,
-  version   => $VERSION,
-  base      => 'XAS::Darkpan::Process::Base',
-  utils     => 'dotid :validation',
-  accessors => 'database',
-  vars => {
-    PARAMS => {
-      -path => { optional => 1, isa => 'Badger::Filesystem::Directory', default => Dir('/srv/dpan/authors') },
-    }
-  }
+  debug   => 0,
+  version => $VERSION,
+  base    => 'XAS::Darkpan::Process::Base',
+  utils   => 'dotid :validation',
 ;
 
 # ----------------------------------------------------------------------
@@ -26,16 +20,14 @@ use XAS::Class
 
 sub create {
     my $self = shift;
-    my ($mirror) = validate_params(\@_, [
-        { optional => 1, default => $self->mirror, isa => 'Badger::URL' },
-    ]);
 
     $self->log->debug('entering create()');
 
     my $fh;
     my $file = File($self->path, '01mailrc.txt.gz');
+
     my $authors = $self->database->data(
-        -criteria => { mirror => $mirror },
+        -criteria => { mirror => $self->mirror->server },
         -options  => { order_by => 'pauseid' },
     );
 
@@ -81,7 +73,7 @@ sub inject {
        -pause_id => 1,
        -name     => 1,
        -email    => 1,
-       -mirror   => { optional => 1, default => $self->mirror, isa => 'Badger::URL' },
+       -mirror   => { optional => 1, isa => 'Badger::URL', default => $self->mirror }
     });
 
     $self->log->debug('entering inject()');
@@ -89,7 +81,7 @@ sub inject {
     my $name    = $p->{'name'};
     my $email   = $p->{'email'};
     my $pauseid = uc($p->{'pause_id'});
-    my $mirror  = $p->{'mirror'}->service;
+    my $mirror  = $p->{'mirror'}->server;
 
     $self->database->add(
         -name    => $name,
@@ -110,13 +102,12 @@ sub init {
     my $class = shift;
 
     my $self = $class->SUPER::init(@_);
-    my $authors = $self->mirror->copy();
 
-    $authors->path('/authors/01mailrc.txt.gz');
+    $self->mirror->path('/authors/01mailrc.txt.gz');
 
     $self->{'database'} = XAS::Darkpan::DB::Authors->new(
         -schema => $self->schema,
-        -url    => $authors,
+        -url    => $self->mirror,
     );
 
     $self->lockmgr->add(-key => $self->path);

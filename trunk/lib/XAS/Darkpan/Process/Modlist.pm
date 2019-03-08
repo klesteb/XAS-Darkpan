@@ -10,11 +10,6 @@ use XAS::Class
   version    => $VERSION,
   base       => 'XAS::Darkpan::Process::Base',
   filesystem => 'File',
-  vars => {
-    PARAMS => {
-      -path => { optional => 1, isa => 'Badger::Filesystem::Directory', default => Dir('/srv/dpan/modules') },
-    }
-  }
 ;
 
 # ----------------------------------------------------------------------

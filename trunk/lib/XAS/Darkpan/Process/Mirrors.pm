@@ -8,16 +8,11 @@ use XAS::Darkpan::DB::Mirrors;
 use Badger::Filesystem 'Dir File';
 
 use XAS::Class
-  debug     => 0,
-  version   => $VERSION,
-  base      => 'XAS::Darkpan::Process::Base',
-  utils     => 'dotid :validation',
-  codec     => 'JSON',
-  vars => {
-    PARAMS => {
-      -path => { optional => 1, isa => 'Badger::Filesystem::Directory', default => Dir('/srv/dpan/modules/07mirror.json') },
-    }
-  }
+  debug   => 0,
+  version => $VERSION,
+  base    => 'XAS::Darkpan::Process::Base',
+  utils   => 'dotid :validation',
+  codec   => 'JSON',
 ;
 
 # ----------------------------------------------------------------------
@@ -36,8 +31,8 @@ sub create {
     $self->log->debug('entering create()');
 
     my $fh;
-    my $file = File($self->path, '07mirror.json');
     my $mirrors = $self->database->data();
+    my $file = File($self->path, '07mirror.json');
 
     if ($self->lockmgr->lock($self->path)) {
 
@@ -92,13 +87,12 @@ sub init {
     my $class = shift;
 
     my $self = $class->SUPER::init(@_);
-    my $mirrors = $self->mirror->copy();
 
-    $mirrors->path('/modules/07mirror.json');
+    $self->mirror->path('/modules/07mirror.json');
 
     $self->{'database'} = XAS::Darkpan::DB::Mirrors->new(
         -schema => $self->schema,
-        -url    => $mirrors,
+        -url    => $self->mirror,
     );
 
     $self->lockmgr->add(-key => $self->path);

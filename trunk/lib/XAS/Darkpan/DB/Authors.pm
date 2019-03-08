@@ -55,15 +55,12 @@ sub add {
         -mirror  => 1,
     });
 
-    my $results;
     my $schema = $self->schema;
     my $dt = DateTime->now(time_zone => 'local');
 
     $p->{'datetime'} = dt2db($dt);
 
-    $results = Authors->create_record($schema, $p);
-
-    return $results;
+    return Authors->create_record($schema, $p);
     
 }
 

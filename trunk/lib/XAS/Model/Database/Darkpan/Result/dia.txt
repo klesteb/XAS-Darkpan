@@ -1,46 +1,55 @@
 
 [authors]
     id
-    pauseid ---+
-    name       |
-    email      |
-    datetime   |
-    revison    |
-               |
-[packages]     |
-    id --------|---+     
-    package    |   |  
-    dist       |   |  
-    version    |   |
-    maturity   |   |
-    filename   |   |
-    pauseid <--+   |
-    extension      |
-    pathname       |
-    mirror <---+   |
-    datetime   |   |
-    revision   |   |
-               |   |
-[mirrors]      |   |
-    mirror ----+   |
-    type           |
-    datetime       |
-    revision       |
-                   |
-[provides]         |
-    id             |
-    package_id <---+
-    module         |
-    version        |
-    pathname       |
-    datetime       |
-    revision       |
-                   |
-[requires]         |
-    id             |
-    package_id <---+
-    module
-    version
+    pauseid ---+-----+
+    name       |     |
+    email      |     |
+    datetime   |     |
+    revison    |     |
+               |     |
+[packages]     |     |
+    id --------|---+ |    
+    package    |   | |
+    dist       |   | |  
+    version    |   | |
+    maturity   |   | |
+    filename   |   | |
+    pauseid <--+   | |
+    extension      | |
+    pathname       | |
+    mirror <---+   | |
+    datetime   |   | |
+    revision   |   | |
+               |   | |
+[mirrors]      |   | |
+    mirror ----+---|-|---+
+    type           | |   |
+    datetime       | |   |
+    revision       | |   |
+                   | |   |
+[provides]         | |   |
+    id             | |   |
+    package_id <---+ |   |
+    module <-------|-|-+ |
+    version        | | | |
+    pathname       | | | |
+    datetime       | | | |
+    revision       | | | |
+                   | | | |
+[requires]         | | | |
+    id             | | | |
+    package_id <---+ | | |
+    module           | | |
+    version          | | |
+    datetime         | | |
+    revision         | | |
+                     | | |
+[perms]              | | |
+    id               | | |
+    pauseid <--------+ | |
+    module  <----------+ |
+    perms                |
+    mirror  <------------+
     datetime
     revision
     

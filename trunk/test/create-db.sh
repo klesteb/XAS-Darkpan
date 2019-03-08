@@ -7,7 +7,7 @@
 # Create a new darkpan database
 #
 
-rm /var/lib/xas/darkpan.db
+#rm /var/lib/xas/darkpan.db
 export PERL5LIB=~/dev/XAS-Darkpan/trunk/lib
 xas-create-schema --schema XAS::Model::Database::Darkpan
 cat sql/XAS-Model-Schema-0.01-SQLite.sql | sqlite3 /var/lib/xas/darkpan.db
