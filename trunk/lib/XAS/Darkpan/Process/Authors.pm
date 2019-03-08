@@ -20,6 +20,9 @@ use XAS::Class
 
 sub create {
     my $self = shift;
+    my $p = validate_params(\@_, {
+       -mirror => { optional => 1, isa => 'Badger::URL', default => $self->mirror }
+    });
 
     $self->log->debug('entering create()');
 
@@ -27,7 +30,7 @@ sub create {
     my $file = File($self->path, '01mailrc.txt.gz');
 
     my $authors = $self->database->data(
-        -criteria => { mirror => $self->mirror->server },
+        -criteria => { mirror => $p->{'mirror'}->server },
         -options  => { order_by => 'pauseid' },
     );
 

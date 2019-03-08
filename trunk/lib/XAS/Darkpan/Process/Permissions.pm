@@ -26,11 +26,14 @@ my $PERMS = qr/m|f|c/;
 
 sub create {
     my $self = shift;
+    my $p = validate_params(\@_, {
+        -mirror => { optional => 1, isa => 'Badger::URL', default => $self->mirror }
+    });
 
     $self->log->debug('entering create()');
 
     my $criteria = {
-        mirror => $self->mirror->server
+        mirror => $p->{'mirror'}->server
     };
 
     my $fh;

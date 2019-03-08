@@ -48,10 +48,13 @@ my $LOCK     = qr/\.lock$/;
 
 sub create {
     my $self = shift;
+    my $p = validate_params(\@_, {
+        -mirror => { optional => 1, isa => 'Badger::URL', default => $self->mirror },
+    });
     
     my $fh;
     my $criteria = {
-        mirror => $self->mirror->server
+        mirror => $p->{'mirror'}->server
     };
     my $module   = $self->class;
     my $program  = $self->env->script;
