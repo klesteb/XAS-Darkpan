@@ -38,13 +38,11 @@ sub create {
     };
 
     my $fh;
-    my $module  = $self->class;
-    my $program = $self->env->script;
-    my $dt      = DateTime->now(time_zone => 'GMT');
-    my $date    = $dt->strftime('%a, %d %b %Y %T %Z');
-    my $file    = File($self->path, '06perms.txt.gz');
-    my $perms   = $self->database->data(-criteria => $criteria);
-    my $count   = $self->database->count(-criteria => $criteria) + 9;
+    my $dt    = DateTime->now(time_zone => 'GMT');
+    my $date  = $dt->strftime('%a, %d %b %Y %T %Z');
+    my $file  = File($self->path, '06perms.txt.gz');
+    my $perms = $self->database->data(-criteria => $criteria);
+    my $count = $self->database->count(-criteria => $criteria) + 9;
 
     if ($self->lockmgr->lock($self->path)) {
 
