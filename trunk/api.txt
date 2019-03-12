@@ -1,0 +1,109 @@
+
+A local CPAN repository as a micro service. This defines the api of
+that service.
+
+There is no html interface, so you must set the "Accept" header, this should 
+be either "application/json" or "application/hal+json" to use a "discoverable"
+REST interface. All access is authenticated using HTTP Basic Authentication.
+
+Queries
+
+GET /api
+
+    returns the root urls, useful for REST discovery
+
+    curl -v http://<server>:<port>/api -u <username> -H "Accept: application/hal+json"
+
+    success returns a 200 code
+
+GET /api/authors
+
+	returns a paged list of authors
+
+    curl -v http://<server>:<port>/api/authors -u <username> -H "Accept: application/hal+json"
+
+    success returns a 200 code
+
+GET /api/authors/list
+
+	returns a non-paged list of authors
+
+    curl -v http://<server>:<port>/api/authors/list -u <username> -H "Accept: application/hal+json"
+
+    success returns a 200 code
+
+GET /api/authors/{id}
+
+	returns a a single author
+
+    curl -v http://<server>:<port>/api/authors/{id} -u <username> -H "Accept: application/hal+json"
+
+    success returns a 200 code
+
+POST /api/authors
+
+	creates a new author
+
+	contents of authors.json
+
+    {
+        "pause_id":"KESTEB",
+        "name":"Kevin L. Esteb",
+        "email":"kevin@kesteb.us",
+        "mirror":"http://localhost:8080"
+    }
+	 
+	curl -v http://<server>:<port>/api/authors -u <username> -H "Content-Type: application/json" -XPOST -Tauthors.json
+
+	success returns a 202 code, authors id is in the "Location" header, 
+    you should use GET on /api/authors/{id} to verify the author
+
+PUT /api/authors/create
+
+	creates the 01mailrc.txt.gz file
+
+	curl -v http://<server>:<port>/api/authors/create -u <username> -H -XPUT
+
+	success returns a 202 code
+
+
+PUT /api/authors/{id}
+
+	update an author
+
+	contents of authors.json
+
+    {
+        "pause_id":"KESTEB",
+        "name":"Kevin L. Esteb",
+        "email":"kevin@kesteb.us",
+        "mirror":"http://localhost:8080"
+    }
+
+	curl -v http://<server>:<port>/api/authors/{id} -u <username> -Tauthors.json -H "Content-type: application/json" -XPUT
+
+	success returns a 202 code, authors id is in the "Location" header, you 
+    should use GET on /api/authors/{id} to verify changes
+
+DELETE /api/authors/{id}
+
+	deletes an exiting auther
+
+	curl -v http://<server>:<port>/api/authors/{id} -u <username> -XDELETE
+
+	success returns a 204 code, you should use GET on /api/authors/{id} to 
+    verify success
+
+OPTIONS /api/authors/create
+
+	returns the available options 
+
+	curl -v http://<server>:<port>/api/authors/create -XOPTIONS
+
+OPTIONS /api/authors/{id}
+
+	returns the available options 
+
+	curl -v http://<server>:<port>/api/authors/{id} -XOPTIONS
+
+
