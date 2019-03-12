@@ -8,6 +8,7 @@ use Badger::Filesystem 'Dir';
 use XAS::Lib::Lockmgr;
 use XAS::Darkpan::Process::Authors;
 use XAS::Darkpan::Process::Mirrors;
+use XAS::Darkpan::Process::Modlist;
 use XAS::Darkpan::Process::Packages;
 use XAS::Darkpan::Process::Permissions;
 
@@ -15,7 +16,7 @@ use XAS::Class
   debug     => 0,
   version   => $VERSION,
   base      => 'XAS::Base',
-  accessors => 'packages authors mirrors lockmgr permissions',
+  accessors => 'packages authors mirrors lockmgr permissions modlist',
   utils     => 'dotid',
   vars => {
     PARAMS => {
@@ -234,6 +235,13 @@ sub init {
     );
 
     $self->{'mirrors'} = XAS::Darkpan::Process::Mirrors->new(
+        -schema  => $self->schema,
+        -lockmgr => $self->lockmgr,
+        -path    => Dir($root, 'modules'),
+        -mirror  => $self->mirror->copy()
+    );
+
+    $self->{'modlist'} = XAS::Darkpan::Process::Modlist->new(
         -schema  => $self->schema,
         -lockmgr => $self->lockmgr,
         -path    => Dir($root, 'modules'),

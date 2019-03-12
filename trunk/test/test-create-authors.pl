@@ -17,8 +17,8 @@ my $schema = XAS::Model::Schema->opendb('darkpan');
 my $authors = XAS::Darkpan::Process::Authors->new(
     -schema  => $schema,
     -lockmgr => $lockmgr,
-    -path    => Dir('/var/lib/xas/darkpan/modules'),
-    -mirror  => URL('http://localhost')
+    -path    => Dir('/var/lib/xas/darkpan/authors'),
+    -mirror  => URL('http://localhost:8080')
 );
 
 $authors->create();

@@ -63,7 +63,7 @@ sub create {
     my $date     = $dt->strftime('%a %b %d %H:%M:%S %Y %Z');
     my $packages = $self->database->data(-criteria => $criteria);
     my $file     = File($self->path, '02packages.details.txt.gz');
-    my $count    = $self->database->count(-criteria => $criteria) + 9;
+    my $count    = scalar(@$packages) + 9;
     
     $self->log->debug('entering create()');
 
@@ -179,6 +179,7 @@ sub process {
 
             $self->_load_archive($file, $package_id);
             $self->_checksum($file->directory);
+            $self->_create_readme($file);
 
         }
 
@@ -365,6 +366,65 @@ sub _checksum {
     CPAN::Checksums::updatedir($directory->path);
 
     $self->log->debug('leaving _checksum()');
+
+}
+
+sub _create_readme {
+    my $self = shift;
+    my ($file) = validate_params(\@_, [
+        { isa => 'Badger::Filesystem::File' },
+    ]);
+    
+    $self->log->debug('entering _create_readme()');
+
+    my $hash = {};
+    my $dist = CPAN::DistnameInfo->new($file->path);
+    my $readme = 'Sorry, no readme was provided by the package.';
+    my $callback = sub {
+        my $self    = shift;
+        my $hash    = shift;
+        my $path    = shift;
+        my $content = shift;
+
+        $readme = $$content;
+        
+    };
+
+    if ($file->path =~ $TAR) {
+
+        $self->_inspect_tar_archive(
+            -filename => $file, 
+            -filter   => $README, 
+            -hash     => $hash,
+            -callback => $callback
+        );
+
+    } elsif ($file->path =~ $ZIP) {
+
+        $self->_inspect_zip_archive(
+            -filename => $file, 
+            -filter   => $README, 
+            -hash     => $hash,
+            -callback => $callback
+        );
+
+    } else {
+
+        $self->throw_msg(
+            dotid($self->class) . '.create_readme.unknownarc',
+            'unknownarc',
+            $file,
+        );
+
+    }
+    
+    my $filename = File($file->directory, $dist->distvname . '.readme');
+    my $fh = $filename->open('w');
+
+    $fh->print($readme);
+    $fh->close();
+    
+    $self->log->debug('leaving _create_readme()');
 
 }
 

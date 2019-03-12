@@ -10,16 +10,16 @@ use Badger::Filesystem 'Dir';
 
 use XAS::Lib::Lockmgr;
 use XAS::Model::Schema;
-use XAS::Darkpan::Process::Packages;
+use XAS::Darkpan::Process::Modlist;
 
 my $lockmgr = XAS::Lib::Lockmgr->new();
 my $schema = XAS::Model::Schema->opendb('darkpan');
-my $packages = XAS::Darkpan::Process::Packages->new(
+my $modlist = XAS::Darkpan::Process::Modlist->new(
     -schema  => $schema,
     -lockmgr => $lockmgr,
-    -mirror  => URL('http://localhost:8080'),
-    -path    => Dir('/var/lib/xas/darkpan/modules')
+    -path    => Dir('/var/lib/xas/darkpan/modules'),
+    -mirror  => URL('http://localhost')
 );
 
-$packages->create();
+$modlist->create();
 

@@ -21,7 +21,7 @@ my $process = XAS::Darkpan::Process->new(
 );
 
 
-$process->log->level('debug', 1);
+#$process->log->level('debug', 1);
 
 $process->create_authors();
 
@@ -31,7 +31,7 @@ $process->mirrors->inject(
 );
 
 $process->mirrors->inject(
-    -url  => URL('http://localhost'),
+    -url  => URL('http://localhost:8080'),
     -type => 'mirror'
 );
 
@@ -39,13 +39,13 @@ $process->authors->inject(
     -pause_id => 'KESTEB',
     -name     => 'Kevin L. Esteb',
     -email    => 'kevin@kesteb.us',
-    -mirror   => URL('http://localhost')
+    -mirror   => URL('http://localhost:8080')
 );
 
 my $rec = $process->packages->inject(
     -pause_id => 'KESTEB',
     -package  => $distribution,
-    -mirror   => URL('http://localhost'),
+    -mirror   => URL('http://localhost:8080'),
     -source   => Dir($root, 'authors', 'id'),
 );
 
@@ -67,8 +67,13 @@ foreach my $provider (@$providers) {
         -pause_id => 'KESTEB',
         -module  => $provider->name,
         -perms   => 'f',
-        -mirror  => URL('http://localhost')
+        -mirror  => URL('http://localhost:8080')
     );
 
 }
+
+$process->authors->create();
+$process->packages->create();
+$process->mirrors->create();
+$process->modlist->create();
 

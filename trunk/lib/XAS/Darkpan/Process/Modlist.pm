@@ -22,7 +22,7 @@ sub create {
     my $fh;
     my $dt = DateTime->now(time_zone => 'GMT');
     my $date = $dt->strftime('%a %b %d %H:%M:%S %Y %Z');
-    my $file = File($self->path, '03modlist..gz');
+    my $file = File($self->path, '03modlist.data.gz');
 
     $self->log->debug('entering create()');
 
@@ -60,6 +60,19 @@ __MODLIST
 # ----------------------------------------------------------------------
 # Private Methods
 # ----------------------------------------------------------------------
+
+sub init {
+    my $class = shift;
+
+    my $self = $class->SUPER::init(@_);
+
+    $self->mirror->path('/modules/03modlist.data.gz');
+
+    $self->lockmgr->add(-key => $self->path);
+    
+    return $self;
+
+}
 
 1;
 
