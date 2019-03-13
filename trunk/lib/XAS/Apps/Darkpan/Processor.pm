@@ -6,8 +6,12 @@ use Web::Machine;
 use Plack::Builder;
 use Authen::Simple;
 use Plack::App::File;
+use Badger::URL 'URL';
+use XAS::Lib::Lockmgr;
+use XAS::Model::Schema;
 use Plack::App::URLMap;
 use XAS::Service::Server;
+use XAS::Darkpan::Process::Authors;
 
 use XAS::Class
   version    => '0.01',
@@ -38,18 +42,41 @@ sub build_routes {
     my $name        = shift;
     my $description = shift;
     my $authen      = shift;
+    my $dpath       = shift;
+    my $mirror      = shift;
 
-    # $$urlmap->mount('/api' => Web::Machine->new(
-    #     resource => 'XAS::Resource::Darkpan::Root',
-    #     resource_args => [
-    #         alias           => 'root',
-    #         template        => $template,
-    #         json            => $json,
-    #         app_name        => $name,
-    #         app_description => $description,
-    #         authenticator   => $authen,
-    #     ] )
-    # );
+    my $lockmgr = XAS::Lib::Lockmgr->new();
+    my $schema  = XAS::Model::Schema->opendb('darkpan');
+    
+    $$urlmap->mount('/api' => Web::Machine->new(
+        resource => 'XAS::Service::Resource::Darkpan::Root',
+        resource_args => [
+            alias           => 'root',
+            template        => $template,
+            json            => $json,
+            app_name        => $name,
+            app_description => $description,
+            authenticator   => $authen,
+        ] )
+    );
+
+    $$urlmap->mount('/api/authors' => Web::Machine->new(
+        resource => 'XAS::Service::Resource::Darkpan::Authors',
+        resource_args => [
+            alias           => 'authors',
+            template        => $template,
+            json            => $json,
+            app_name        => $name,
+            app_description => $description,
+            authenticator   => $authen,
+            processor       => XAS::Darkpan::Process::Authors->new(
+                -schema  => $schema,
+                -lockmgr => $lockmgr,
+                -path    => Dir($dpath, 'authors', 'id'),
+                -mirror  => $mirror->copy()
+            );
+        ])
+    );
 
 }
 
@@ -119,6 +146,9 @@ sub build_app {
     my $name = $self->cfg->val('app', 'name', 'WEB Services');
     my $description = $self->cfg->val('app', 'description', 'Test api using RESTFUL HAL-JSON');
 
+    my $dpath = Dir($self->cfg->val('darkpan', 'path', $self->env->libs, 'xas', 'darkpan'));
+    my $mirror = URL($self->cfg->val('darkpan', 'mirror', 'http://www.cpan.org');
+
     push(@paths, $base->path);
     push(@paths, $root->path) unless ($base eq $root);
 
@@ -144,7 +174,7 @@ sub build_app {
     my $builder = Plack::Builder->new();
     my $urlmap  = $self->build_static($root);
 
-    $self->build_routes(\$urlmap, $base, $template, $json, $name, $description, $authen);
+    $self->build_routes(\$urlmap, $base, $template, $json, $name, $description, $authen, $dpath, mirror);
 
     return $builder->to_app($urlmap->to_app);
 

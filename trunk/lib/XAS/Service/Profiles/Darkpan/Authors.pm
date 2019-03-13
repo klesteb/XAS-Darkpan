@@ -16,12 +16,13 @@ sub build {
     my $profile = {
         filters  => ['trim'],
         required => ['pause_id', 'name', 'email'],
-        optional => ['mirror'],
+        optional => ['mirror','actions'],
         defaults => {
             mirror => 'http://www.cpan.org',
         },
         field_filters => {
-            email => ['filter_email']
+            email   => ['lc'],
+            actions => ['lc'],
         },
         constraint_methods => {
             pause_id => qr/^\w+$/,

@@ -113,6 +113,15 @@ sub search {
 
 }
 
+sub fields {
+    my $self = shift;
+    
+    my @fields = [Mirrors->columns()];
+    
+    return wantarray ? @fields : \@fields;
+    
+}
+    
 sub load {
     my $self = shift;
 

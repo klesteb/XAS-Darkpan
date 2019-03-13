@@ -10,16 +10,10 @@ use Data::Dumper;
 use XAS::Utils 'dt2db';
 use XAS::Service::Search;
 use Badger::Filesystem 'File';
+use XAS::Darkpan::Process::Authors;
 use parent 'XAS::Service::Resource';
 use XAS::Service::Validate::Darkpan::Authors;
 use Web::Machine::Util qw( bind_path create_header );
-
-use XAS::Model::Database
-  schema => 'XAS::Model::Database::Darkpan',
-  tables => ':all'
-;
-
-XAS::Rexec::Common->mixin(__PACKAGE__); # load the mixins
 
 # -------------------------------------------------------------------------
 # Web::Machine::Resource overrides
@@ -31,18 +25,12 @@ sub init {
 
     $self->SUPER::init($args);
 
-    $self->{'schema'} = exists $args->{'schema'}
-      ? $args->{'schema'}
-      : undef;
+    $self->{'authors'} = args->{'processor');
+    
+    my @fields = $self->authors->database->fields();
 
-    $self->{'controller'} = exists $args->{'controller'}
-      ? $args->{'controller'}
-      : 'controller';
-
-    my @fields = [Authors->columns()];
-
-    $self->{'authors'} = XAS::Service::Validate::Darkpan::Authors->new();
-    $self->{'search'}  = XAS::Service::Search->new(-columns => \@fields);
+    $self->{'validate'} = XAS::Service::Validate::Darkpan::Authors->new();
+    $self->{'search'}   = XAS::Service::Search->new(-columns => \@fields);
 
 }
 
@@ -67,23 +55,19 @@ sub malformed_request {
 
         if ($method eq 'GET') {
 
-            unless (($id eq '_search') or ($id eq '_create')) {
+            unless (($id eq '_search') or ($id eq 'list')) {
 
-                $stat = $self->check_id($id);
 
             }
 
         } elsif ($method eq 'DELETE') {
 
-            $stat = $self->check_id($id);
 
         } elsif ($method eq 'POST') {
 
-            $stat = $self->check_id($id);
 
         } elsif ($method eq 'PUT') {
 
-            $stat = $self->check_id($id);
 
         }
 
@@ -103,56 +87,19 @@ sub resource_exists {
 
     $self->log->debug(sprintf("%s: resource_exists: %s - %s\n", $alias, $path, $method));
 
-    if ($method eq 'DELETE') {
+    if (my $id = bind_path('/:id', $path)) {
 
-        # the item must exist
+        if ($method eq 'DELETE') {
 
-        if (my $id = bind_path('/:id', $path)) {
 
-            my $state = $self->stat_job($id);
-            $stat = (($state eq 'C') or ($state eq 'A'));
+        } elsif ($method eq 'POST') {
 
-        }
 
-    } elsif ($method eq 'POST') {
+        } elsif ($method eq 'PUT') {
 
-        $stat = 1;
 
-        # if there is an id, then this is an action on a current job.
+        } elsif ($method eq 'GET') {
 
-        if (my $id = bind_path('/:id', $path)) {
-
-            my $state = $self->stat_job($id);
-            $stat = $self->check_stat($state);
-
-        }
-
-    } elsif ($method eq 'PUT') {
-
-        # if there is an id, then this is an action on a current job.
-
-        if (my $id = bind_path('/:id', $path)) {
-
-            my $state = $self->stat_job($id);
-            $stat = ($state eq 'Q');
-
-        }
-
-    } elsif ($method eq 'GET') {
-
-        $stat = 1;
-
-        # this can return multiple items. but if an id
-        # is specified, then it must exist.
-
-        if (my $id = bind_path('/:id', $path)) {
-
-            unless (($id eq '_search') or ($id eq '_create')) {
-
-                my $state = $self->stat_job($id);
-                $stat = ($state ne 'U');
-
-            }
 
         }
 
@@ -174,17 +121,6 @@ sub delete_resource {
 
     if (my $id = bind_path('/:id', $path)) {
 
-        my $state = $self->stat_job($id);
-        my $log   = $self->build_log($id);
-
-        if (($state eq 'C') or ($state eq 'A')) {
-
-            $self->del_job($id);
-            $log->delete if ($log->exists);
-
-            $stat = 1;
-
-        }
 
     }
 
@@ -241,24 +177,22 @@ sub get_response {
         my $criteria = shift;
         my $options  = shift;
 
-        if (my $jobs = $self->get_jobs($criteria, $options)) {
+        my $data = $self->authors->search(-criteria => $criteria, -options => $option);
 
-            foreach my $job (@$jobs) {
-
-                my $jobid = $self->build_id($job->{'id'});
-                my $rec   = $self->build_job($jobid, $job);
-
-                push(@{$data->{'_embedded'}->{'jobs'}}, $rec);
-
-            }
-
+        foreach my $datum (@$data) {
+            
+            my $rec = $self->build_response($datum);
+            push(@{$data->{'_embedded'}->{'authors'}}, $rec);
+            
         }
-
+        
         $data->{'_links'}->{'children'} = [{
             title => 'Create',
-            href  => '/rexec/jobs/_create',
+            href  => '/api/authors/create',
+        },{
+            title => 'List',
+            href  => '/api/authors',
         }];
-
     };
 
     $data->{'_links'}     = $self->get_links();
@@ -266,26 +200,19 @@ sub get_response {
 
     if ($id = bind_path('/:id', $path)) {
 
-        if ($id eq '_create') {
-
-            $data->{'_embedded'}->{'form'} = $self->create_form();
-
-        } elsif ($id eq '_search') {
+        if ($id eq '_search') {
 
             my $params = $self->request->parameters;
             my ($criteria, $options) = $self->search->build($params);
 
             $build_data->($criteria, $options);
-
+            
         } else {
 
-            if (my $job = $self->get_job($id)) {
-
-                my $rec = $self->build_job($id, $job);
-
-                $data->{'_embedded'}->{'job'} = $rec;
-
-            }
+            my $options = {};
+            my $criteria = { id => $id };
+            
+            $build_data->($criteria, $options);
 
         }
 
@@ -319,7 +246,7 @@ sub process_params {
 
     $self->log->debug("$alias: process_params - $path");
 
-    if (my $valids = $self->jobs->check($params)) {
+    if (my $valids = $self->validate->check($params)) {
 
         my $action = $valids->{'action'};
 
@@ -328,7 +255,7 @@ sub process_params {
             if (defined($valids->{'cancel'})) {
 
                 # from the html interface, if the cancel button was pressed,
-                # redirect back to /rexec/jobs
+                # redirect back to /api/authors
 
                 $stat = \301;
                 $self->response->header('Location' => sprintf('%s', $uri->path));
@@ -388,64 +315,18 @@ sub handle_action {
 
     my $stat = 0;
     my $alias = $self->alias;
-    my $controller = $self->controller;
 
     $self->log->debug(sprintf("%s: handle_action: %s", $alias, $action));
 
     if ($action eq 'start') {
 
-        my $state = $self->stat_job($id);
-
-        if (($state eq 'Q') or ($state eq 'A')) {
-
-            $poe_kernel->post($controller, 'start_job', $id);
-            $stat = 1;
-
-        }
-
     } elsif ($action eq 'resume') {
-
-        my $state = $self->stat_job($id);
-
-        if ($state eq 'P') {
-
-            $poe_kernel->post($controller, 'resume_job', $id);
-            $stat = 1;
-
-        }
 
     } elsif ($action eq 'pause') {
 
-        my $state = $self->stat_job($id);
-
-        if ($state eq 'R') {
-
-            $poe_kernel->post($controller, 'pause_job', $id);
-            $stat = 1;
-
-        }
-
     } elsif ($action eq 'stop') {
 
-        my $state = $self->stat_job($id);
-
-        if ($state eq 'R') {
-
-            $poe_kernel->post($controller, 'stop_job', $id);
-            $stat = 1;
-
-        }
-
     } elsif ($action eq 'kill') {
-
-        my $state = $self->stat_job($id);
-
-        if ($state eq 'R') {
-
-            $poe_kernel->post($controller, 'kill_job', $id);
-            $stat = 1;
-
-        }
 
     }
 
@@ -455,7 +336,7 @@ sub handle_action {
 
 sub build_20X {
     my $self  = shift;
-    my $jobid = shift;
+    my $id    = shift;
 
     my $data;
 
@@ -464,10 +345,10 @@ sub build_20X {
     $data->{'_links'}     = $self->get_links();
     $data->{'navigation'} = $self->get_navigation();
 
-    if (my $job = $self->get_job($jobid)) {
+    if (my $author = $self->get_author($id)) {
 
-        my $info = $self->build_job($jobid, $job);
-        $data->{'_embedded'}->{'job'} = $info;
+        my $info = $self->build_response($author);
+        $data->{'_embedded'}->{'author'} = $info;
 
     }
 
@@ -479,7 +360,7 @@ sub post_data {
     my $self   = shift;
     my $params = shift;
 
-    my $jobid;
+    my $id;
     my $alias  = $self->alias;
     my $schema = $self->schema;
     my $uri    = $self->request->uri;
@@ -488,84 +369,32 @@ sub post_data {
 
     $self->log->debug("$alias: post_data");
 
-    $schema->txn_do(sub {
+    my $data = {
+        pauseid  => $params->{'pause_id'},
+        name     => $params->{'name'},
+        email    => $params->{'email'},
+        mirror   => $params->{'mirror'},
+        datetime => $dt,
+    };
+        
+    my $results = Authors->create_record($schema, $data);
 
-        my $data = {
-            status      => 'Q',
-            queued_time => $dt,
-            username    => $params->{'username'},
-            command     => $params->{'command'},
-            priority    => $params->{'priority'},
-            umask       => $params->{'umask'},
-            xgroup      => $params->{'group'},
-            user        => $params->{'user'},
-            directory   => $params->{'directory'},
-            environment => 'XAS_REXECD=1;;' . ($params->{'environment'} || ''),
-        };
-
-        my $job = Jobs->create($schema, $data);
-        $jobid = $self->build_id($job->id);
-
-    });
-
-    return $jobid;
+    return $results->id;
 
 }
 
-sub build_job {
+sub build_response {
     my $self = shift;
-    my $id   = shift;
     my $rec  = shift;
 
-    my $log   = $self->build_log($id);
-    my $state = $self->stat_job($id);
-
+    my $id = $rec->id;
     my $data = {
         _links => {
-            self => { href => "/rexec/jobs/$id", title => 'View' }
+            self   => { href => "/api/authors/$id", title => 'Self' },
+            delete => { href => "/api/authors/$id", title => 'Delete' },
+            edit   => { href => "/api/authors/$id", title => 'Edit' },
         }
     };
-
-    if ($log->exists) {
-
-        $data->{'_links'}->{'log'} = { href => "/rexec/logs/$id", title => 'Log' };
-
-    }
-
-    if ($state eq 'A') {
-
-        $data->{'_links'}->{'delete'} = { href => "/rexec/jobs/$id", title => 'Delete' };
-        $data->{'_links'}->{'start'}  = { href => "/rexec/jobs/$id", title => 'Start' };
-
-    }
-
-    if ($state eq 'C') {
-
-        $data->{'_links'}->{'delete'} = { href => "/rexec/jobs/$id", title => 'Delete' };
-
-    }
-
-    if ($state eq 'P') {
-
-        $data->{'_links'}->{'resume'} = { href => "/rexec/jobs/$id", title => 'Resume' };
-
-    }
-
-    if ($state eq 'Q') {
-
-        $data->{'_links'}->{'start'}  = { href => "/rexec/jobs/$id", title => 'Start' };
-        $data->{'_links'}->{'delete'} = { href => "/rexec/jobs/$id", title => 'Delete' };
-
-    };
-
-    if ($state eq 'R') {
-
-        $data->{'_links'}->{'pause'}  = { href => "/rexec/jobs/$id", title => 'Pause' };
-        $data->{'_links'}->{'resume'} = { href => "/rexec/jobs/$id", title => 'Resume' };
-        $data->{'_links'}->{'stop'}   = { href => "/rexec/jobs/$id", title => 'Stop' };
-        $data->{'_links'}->{'kill'}   = { href => "/rexec/jobs/$id", title => 'Kill' };
-
-    }
 
     while (my ($key, $value) = each(%$rec)) {
 
@@ -573,7 +402,7 @@ sub build_job {
 
     }
 
-    $data->{'jobid'} = $id;
+    $data->{'id'} = $id;
 
     delete $data->{'id'};
     delete $data->{'revision'};
@@ -585,30 +414,23 @@ sub build_job {
 sub create_form {
     my $self = shift;
 
-    # jobname:     the name of the job
-    # username:    name of user that submitted the command
-    # command:     command line to execute
-    # priority:    prioritiy to run process under
-    # umask:       process protection mask
-    # group:       local group to run under
-    # user:        local user to run under
-    # directory:   default directory
-    # environment: optional environment variables
-    # after:       optional start time <yyyy-mm-ddThh:mm:ss>
-    # email:       optional email address to notify
+    # pause_id: the authors PAUSE name
+    # name:     name of user that submitted the command
+    # email:    command line to execute
+    # mirror:   prioritiy to run process under
 
     my $form = {
         name    => 'create',
         method  => 'POST',
         enctype => 'application/x-www-form-urlencoded',
-        url     => '/rexec/jobs',
+        url     => '/api/authors',
         items => [{
             type  => 'hidden',
             name  => 'action',
             value => 'POST',
         },{
             type => 'fieldset',
-            legend => 'Create a new Job',
+            legend => 'Create a new Author',
             fields => [{
                 id       => 'username',
                 label    => 'Username',
@@ -617,65 +439,31 @@ sub create_form {
                 tabindex => 2,
                 required => 1,
             },{
-                id       => 'command',
-                label    => 'Command',
+                id       => 'name',
+                label    => 'name',
                 type     => 'textfield',
-                name     => 'command',
+                name     => 'name',
                 tabindex => 3,
                 required => 1,
             },{
-                id       => 'priority',
-                label    => 'Priority',
-                type     => 'number',
-                name     => 'priority',
-                min      => -1023,
-                max      => 1024,
-                value    => 0,
+                id       => 'email',
+                label    => 'email',
+                type     => 'textfield',
+                name     => 'email',
                 tabindex => 5,
-                required => 0,
+                required => 1,
             },{
-                id       => 'umask',
-                label    => 'Umask',
+                id       => 'mirror',
+                label    => 'mirror',
                 type     => 'textfield',
-                name     => 'umask',
-                value    => '0022',
+                name     => 'mirror',
+                value    => 'http://www.cpan.org',
                 tabindex => 6,
-                required => 0,
-            },{
-                id       => 'group',
-                label    => 'Group',
-                type     => 'textfield',
-                name     => 'group',
-                value    => 'wise',
-                tabindex => 7,
-                required => 0,
-            },{
-                id       => 'user',
-                label    => 'User',
-                type     => 'textfield',
-                name     => 'user',
-                value    => 'wise',
-                tabindex => 8,
-                required => 0,
-            },{
-                id       => 'directory',
-                label    => 'Directory',
-                type     => 'textfield',
-                name     => 'directory',
-                value    => '/',
-                tabindex => 9,
-                required => 0,
-            },{
-                id       => 'environment',
-                label    => 'Environment',
-                type     => 'textfield',
-                name     => 'environment',
-                tabindex => 10,
                 required => 0,
             }]
         },{
             type => 'standard_buttons',
-            tabindex => 12,
+            tabindex => 7,
         }]
     };
 
@@ -687,20 +475,6 @@ sub create_form {
 # accessors - the old fashioned way
 # -------------------------------------------------------------------------
 
-sub schema {
-    my $self = shift;
-
-    return $self->{'schema'};
-
-}
-
-sub controller {
-    my $self = shift;
-
-    return $self->{'controller'};
-
-}
-
 sub search {
     my $self = shift;
 
@@ -708,11 +482,18 @@ sub search {
 
 }
 
-sub jobs {
+sub validate {
     my $self = shift;
 
-    return $self->{'jobs'};
+    return $self->{'validate'};
 
+}
+
+sub authors {
+    my $self = shift;
+    
+    return $self->{'authors'};
+    
 }
 
 1;
@@ -735,7 +516,6 @@ XAS::Service::Resource::Darkpan::Authors - Perl extension for the XAS environmen
             template        => $template,
             schema          => $schema,
             app_name        => $name,
-            controler       -> $controller,
             app_description => $description
         ] )->to_app
     );

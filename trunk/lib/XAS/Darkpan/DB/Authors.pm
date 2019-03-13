@@ -105,6 +105,15 @@ sub search {
 
 }
 
+sub fields {
+    my $self = shift;
+    
+    my @fields = [Authors->columns()];
+    
+    return wantarray ? @fields : \@fields;
+    
+}
+
 sub load {
     my $self = shift;
 

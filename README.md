@@ -1,20 +1,24 @@
-XAS - Middleware for Perl
-==========================
+XAS Darkpan - An implementation of a local CPAN respository 
+=============================================================
 
-I have over 30 years in systems administration. During those years, I
-have written or help maintain 4 operations environments. Most where on
-proprietary platforms that can't be reproduced nor released. This one is 
-a generic version of the 6th iteration of the 4th environment. The
-first iteration was developed 12 years ago.
+XAS is a set of modules, procedures and practices to help write
+consistent Perl5 code for an operations environment. For the most part,
+this follows the Unix tradition of small discrete components that
+communicate in well defined ways.
 
-The philosophy behind these modules is small discrete components that
-communication with well defined interfaces. These are the base modules that 
-make up the system. They represent a "best practice" on how to write 
-distributed systems in Perl. 
+This system is cross platform capable. It will run under Windows as well
+as Unix like environments without a code rewrite. This allows you to
+write your code once and run it wherever.
+
+Installation of this system is fairly straight forward. You can install
+it in the usual Perl fashion or there are build scripts for creating
+Debian and RHEL install packages. Please see the included README for
+details.
+
+These modules impletement a local CPAN repository, better known as a
+DarkPAN. This server is fully compatiable with the cpan command line
+interface, other such utilties should work as expected. There is also 
+a built in micro server to manage the repositories.
 
 Extended documentation is available at: http://scm.kesteb.us/trac
-
-Enjoy...
-
-Kevin
 

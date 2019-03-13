@@ -9,8 +9,7 @@ use Badger::Class
   debug   => 0,
   version => $VERSION,
   exports => {
-      all => 'filter_email valid_url valid_email',
-      filters => 'filter_email',
+      all => 'valid_url valid_email',
       constraints => 'valid_url valid_email'
   }
 ;
@@ -19,23 +18,12 @@ use Badger::Class
 # Public Methods
 # -----------------------------------------------------------------
 
-sub filter_email {
-    
-    return sub {
-        my $email = shift;
-
-        return lc($email);
-        
-    }
-
-}
-
 sub valid_email {
 
     return sub {
         my $dfv = shift;
         
-        $dfv->name_this('valid_email');
+        $dfv->name_this('email');
 
         my $val = $dfv->get_current_constraint_value();
         my $rc = Email::Valid->address(
@@ -53,7 +41,7 @@ sub valid_url {
 
     return sub {
         
-        $dfv->name_this('valid_url');
+        $dfv->name_this('url');
         
         my $val = $dfv->get_current_constraint_value();
         my $url = URL($val);

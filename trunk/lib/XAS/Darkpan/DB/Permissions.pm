@@ -106,6 +106,15 @@ sub search {
 
 }
 
+sub fields {
+    my $self = shift;
+    
+    my @fields = [Permissions->columns()];
+    
+    return wantarray ? @fields : \@fields;
+    
+}
+
 sub load {
     my $self = shift;
 
