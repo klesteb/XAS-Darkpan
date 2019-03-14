@@ -45,7 +45,7 @@ use XAS::Apps::Darkpan::Processor;
 main: {
 
     my $app = XAS::Apps::Darkpan::Processor->new(
-        -throws => 'xas-darkpan',
+        -throws => 'xas-darkpand',
     );
 
     exit $app->run();

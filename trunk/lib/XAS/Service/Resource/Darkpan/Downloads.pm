@@ -5,7 +5,10 @@ use warnings;
 
 use POE;
 use DateTime;
+use Try::Tiny;
 use XAS::Utils 'trim';
+use MIME::Types 'by_suffix';
+use Badger::Filesystem 'File';
 use parent 'Web::Machine::Resource';
 use Web::Machine::Util qw( bind_path );
 
@@ -34,27 +37,40 @@ sub init {
 
 }
 
-sub resource_exists {
+sub malformed_request {
     my $self = shift;
 
-    my $stat   = 0;
+    my $stat   = 1;
     my $alias  = $self->alias;
     my $method = $self->request->method;
     my $path   = $self->request->path_info;
 
-    $self->log->debug("$alias: resource_exists");
+    $self->log->debug("$alias: malformed_request");
 
     if ($method eq 'GET') {
 
-        if (my $package = bind_path('/:package', $path)) {
+        if (File($self->root, $path)->exists) {
 
-            $stat = File($self->root, $package)->exists;
+            $stat = 0;
 
         }
 
     }
 
     return $stat;
+
+}
+
+sub content_types_provided {
+    my $self = shift;
+
+    my $alias = $self->alias;
+
+    $self->log->debug("$alias: content_types_provided");
+
+    return [
+        { '*/*' => 'loader' }
+    ];
 
 }
 
@@ -69,6 +85,8 @@ sub finish_request {
     my $code   = $self->response->code;
     my $path   = $self->request->path_info;
 
+    $self->log->debug("$alias: finish_request");
+
     $self->log->info(
         sprintf('%s: %s requested a %s for %s with a status of %s',
             $alias, $user, $method, $uri, $code)
@@ -79,6 +97,38 @@ sub finish_request {
 # -------------------------------------------------------------------------
 # methods
 # -------------------------------------------------------------------------
+
+sub loader {
+    my $self = shift;
+
+    my $buffer;
+    my $alias = $self->alias;
+    my $path  = $self->request->path_info;
+
+    $self->log->debug("$alias: entering loader");
+
+    try {
+
+        my $file = File($self->root, $path);
+        my $ext = $file->extension;
+        my ($mediatype, $encoding) = by_suffix(lc($ext));
+
+        $buffer = $file->read;
+
+        $self->response->content_type(($mediatype || 'text/plain'));
+        
+    } catch {
+
+        my $ex = $_;
+        $self->log->fatal($ex);
+
+    };
+
+    $self->log->debug(sprintf("$alias: leaving loader"));
+
+    return $buffer;
+
+}
 
 # -------------------------------------------------------------------------
 # accessors - the old fashion way
