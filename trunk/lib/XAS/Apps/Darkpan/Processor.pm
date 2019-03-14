@@ -48,6 +48,20 @@ sub build_routes {
     my $lockmgr = XAS::Lib::Lockmgr->new();
     my $schema  = XAS::Model::Schema->opendb('darkpan');
     
+    $$urlmap->mount('/authors' => Web::Machine->new(
+        resource => 'XAS::Service::Resource::Darkpan::Downloads',
+        resource_args => [
+            alias     => 'authors_download',
+            root      => Dir($dpath, 'authors', 'id'),
+            processor => XAS::Darkpan::Process::Authors->new(
+                -schema  => $schema,
+                -lockmgr => $lockmgr,
+                -path    => Dir($dpath, 'authors', 'id'),
+                -mirror  => $mirror->copy()
+            );
+        ])
+    );
+
     $$urlmap->mount('/api' => Web::Machine->new(
         resource => 'XAS::Service::Resource::Darkpan::Root',
         resource_args => [
@@ -102,10 +116,6 @@ sub build_static {
 
     $urlmap->mount('/modules' => Plack::App::File->new(
         root => Dir($root, '/modules')->path )
-    );
-
-    $urlmap->mount('/authors' => Plack::App::File->new(
-        root => Dir($root, '/authors')->path )
     );
 
     return $urlmap;
