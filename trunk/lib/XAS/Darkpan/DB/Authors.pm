@@ -39,7 +39,7 @@ sub remove {
 
     my $schema = $self->schema;
     my $criteria = {
-        pausied => $id
+        pauseid => $id
     };
 
     Authors->delete_records($schema, $criteria);
@@ -58,9 +58,35 @@ sub add {
     my $schema = $self->schema;
     my $dt = DateTime->now(time_zone => 'local');
 
+    $p->{'downloads'} = 0;
     $p->{'datetime'} = dt2db($dt);
 
     return Authors->create_record($schema, $p);
+    
+}
+
+sub update {
+    my $self = shift;
+    my $p = validate_params(\@_, {
+        -id      => 1,
+        -pauseid => { optional => 1, default => undef },
+        -name    => { optional => 1, default => undef },
+        -email   => { optional => 1, default => undef },
+        -mirror  => { optional => 1, default => undef },
+    });
+
+    my $data;
+    my $schema = $self->schema;
+    my $dt = DateTime->now(time_zone => 'local');
+
+    $data->{'id'}        = $p->{'id'};
+    $data->{'pauseid'}   = $p->{'pauseid'} if (defined($p->{'pauseid'}));
+    $data->{'name'}      = $p->{'name'}    if (defined($p->{'name'}));
+    $data->{'email'}     = $p->{'email'}   if (defined($p->{'email'}));
+    $data->{'mirror'}    = $p->{'mirror'}  if (defined($p->{'mirror'}));
+    $data->{'datetime'}  = dt2db($dt);
+
+    return Authors->update_record($schema, $data);
     
 }
 
@@ -102,6 +128,19 @@ sub search {
     my $schema = $self->schema;
 
     return Authors->search($schema, $p->{'criteria'}, $p->{'options'});
+
+}
+
+sub find {
+    my $self = shift;
+    my $p = validate_params(\@_, {
+        -criteria => { optional => 1, default => {}, type => HASHREF },
+        -options  => { optional => 1, default => {}, type => HASHREF},
+    });
+
+    my $schema = $self->schema;
+
+    return Authors->find($schema, $p->{'criteria'}, $p->{'options'});
 
 }
 

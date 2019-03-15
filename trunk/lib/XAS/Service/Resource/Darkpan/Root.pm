@@ -1,4 +1,4 @@
-package XAS::Service::Resource::Rexec::Root;
+package XAS::Service::Resource::Darkpan::Root;
 
 use strict;
 use warnings;

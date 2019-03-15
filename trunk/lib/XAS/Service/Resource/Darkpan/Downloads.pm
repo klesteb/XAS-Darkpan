@@ -7,10 +7,13 @@ use POE;
 use DateTime;
 use Try::Tiny;
 use XAS::Utils 'trim';
+use Badger::URL 'URL';
+use CPAN::DistnameInfo;
 use MIME::Types 'by_suffix';
-use Badger::Filesystem 'File';
+use Badger::Filesystem 'File Dir';
 use parent 'Web::Machine::Resource';
-use Web::Machine::Util qw( bind_path );
+
+use Data::Dumper;
 
 # -------------------------------------------------------------------------
 # Web::Machine::Resource overrides
@@ -20,20 +23,24 @@ sub init {
     my $self = shift;
     my $args = shift;
 
+    $self->{'log'} = XAS::Factory->module('logger');
+    $self->{'env'} = XAS::Factory->module('environment');
+
     $self->{'alias'} = exists $args->{'alias'}
       ? $args->{'alias'}
       : 'downloader';
 
-    $self->{'processor'} = exists $args->{'processor'}
-      ? $args->{'processor'}
-      : undef;
-
     $self->{'root'} = exists $args->{'root'}
       ? $args->{'root'}
+      : $self->env->lib;
+
+    $self->{'database'} = exists $args->{'database'}
+      ? $args->{'database'}
       : undef;
 
-    $self->{'log'} = XAS::Factory->module('logger');
-    $self->{'env'} = XAS::Factory->module('environment');
+    $self->{'mirror'} = exists $args->{'mirror'}
+      ? $args->{'mirror'}
+      : URL('http://www.cpan.org');
 
 }
 
@@ -43,17 +50,41 @@ sub malformed_request {
     my $stat   = 1;
     my $alias  = $self->alias;
     my $method = $self->request->method;
-    my $path   = $self->request->path_info;
+    my $path   = $self->request->uri->path;
+    my $info   = CPAN::DistnameInfo->new($path);
 
     $self->log->debug("$alias: malformed_request");
 
     if ($method eq 'GET') {
 
-        if (File($self->root, $path)->exists) {
+        try {
 
-            $stat = 0;
+            my $criteria = {
+                pauseid  => $info->cpanid,
+                filename => $info->filename,
+                mirror   => $self->mirror->server
+            };
 
-        }
+            if ($self->database->find(-criteria => $criteria)) {
+
+                $stat = 0;
+
+            } else {
+
+                if (File($self->root, $info->pathname)->exists) {
+
+                    $stat = 0;
+
+                }
+
+            }
+
+        } catch {
+
+            my $ex = $_;
+            $self->log->fatal($ex);
+
+        };
 
     }
 
@@ -80,17 +111,35 @@ sub finish_request {
 
     my $alias  = $self->alias;
     my $user   = $self->request->user || 'unknown';
-    my $uri    = $self->request->uri->path;
     my $method = $self->request->method;
     my $code   = $self->response->code;
-    my $path   = $self->request->path_info;
+    my $path   = $self->request->uri->path;
+    my $info   = CPAN::DistnameInfo->new($path);
 
     $self->log->debug("$alias: finish_request");
 
     $self->log->info(
-        sprintf('%s: %s requested a %s for %s with a status of %s',
-            $alias, $user, $method, $uri, $code)
+        sprintf('%s: "%s" requested a %s for %s with a status of %s',
+            $alias, $user, $method, $path, $code)
     );
+
+    unless (defined($metadata->{'exception'})) {
+
+        my $criteria = {
+            pauseid  => $info->cpanid,
+            filename => $info->filename,
+            mirror   => $self->mirror->server
+        };
+
+        if (my $rec = $self->database->find(-criteria => $criteria)) {
+
+            my $downloads = $rec->downloads + 1;
+
+            $self->database->update(-id => $rec->id, -downloads => $downloads);
+
+        }
+
+    }
 
 }
 
@@ -101,30 +150,41 @@ sub finish_request {
 sub loader {
     my $self = shift;
 
+    my $file;
     my $buffer;
+    my $filename;
+    my $encoding;
+    my $extension;
+    my $mediatype;
     my $alias = $self->alias;
-    my $path  = $self->request->path_info;
+    my $path  = $self->request->uri->path;
+    my $info  = CPAN::DistnameInfo->new($path);
 
     $self->log->debug("$alias: entering loader");
 
-    try {
-
-        my $file = File($self->root, $path);
-        my $ext = $file->extension;
-        my ($mediatype, $encoding) = by_suffix(lc($ext));
-
-        $buffer = $file->read;
-
-        $self->response->content_type(($mediatype || 'text/plain'));
-        
-    } catch {
-
-        my $ex = $_;
-        $self->log->fatal($ex);
-
+    my $criteria = {
+        pauseid  => $info->cpanid,
+        filename => $info->filename,
+        mirror   => $self->mirror->server
     };
 
-    $self->log->debug(sprintf("$alias: leaving loader"));
+    if (my $rec = $self->database->find(-criteria => $criteria)) {
+
+        $file = File($rec->pathname);
+
+    } else {
+
+        $file = File($self->root, $info->pathname);
+
+    }
+
+    $extension = lc($file->extension);
+    ($mediatype, $encoding) = by_suffix($extension);
+
+    $buffer = $file->read;
+    $self->response->content_type(($mediatype || 'text/plain'));
+
+    $self->log->debug("$alias: leaving loader");
 
     return $buffer;
 
@@ -134,6 +194,13 @@ sub loader {
 # accessors - the old fashion way
 # -------------------------------------------------------------------------
 
+sub mirror {
+    my $self = shift;
+
+    return $self->{'mirror'};
+
+}
+
 sub root {
     my $self = shift;
 
@@ -141,10 +208,10 @@ sub root {
 
 }
 
-sub processor {
+sub database {
     my $self = shift;
 
-    return $self->{'processor'};
+    return $self->{'database'};
 
 }
 
@@ -180,20 +247,18 @@ XAS::Service::Resource::Darkpan::Downloads - Perl extension for the XAS environm
 =head1 SYNOPSIS
 
     my $builder = Plack::Builder->new();
-    my $lockmgr = XAS::Lib::Lockmgr->new();
     my $schema  = XAS::Model::Database->opendb('darkpan;);
     my $mirror = Badger::URL->new('http://localhost:8080');
 
     $builder->mount('/authors' => Web::Machine->new(
         resource => 'XAS::Service::Resource::Darkpan::Downloads',
         resource_args => [
-            alias => 'downloader',
-            root  => Dir($path),
-            processor => XAS::Darkpan::Process::Authors->new(
-                -schema  => $schema,
-                -lockmgr => $lockmgr,
-                -root    => Dir($path),
-                -mirror  => $mirror->copy()
+            alias    => 'downloader',
+            root     => Dir($path),
+            mirror   => $mirror->copy(),
+            database => XAS::Darkpan::DB::Packages->new(
+                -schema => $schema,
+                -url    => $mirror->copy(),
             )
         ] )->to_app
     );

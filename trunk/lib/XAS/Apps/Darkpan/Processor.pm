@@ -11,7 +11,7 @@ use XAS::Lib::Lockmgr;
 use XAS::Model::Schema;
 use Plack::App::URLMap;
 use XAS::Service::Server;
-use XAS::Darkpan::Process::Authors;
+use XAS::Darkpan::DB::Packages;
 
 use XAS::Class
   version    => '0.01',
@@ -21,7 +21,7 @@ use XAS::Class
   filesystem => 'File Dir',
   accessors  => 'cfg',
   vars => {
-      SERVICE_NAME         => 'XAS_DARKPAN',
+      SERVICE_NAME         => 'XAS_DARKPAND',
       SERVICE_DISPLAY_NAME => 'XAS Darkpan',
       SERVICE_DESCRIPTION  => 'A local CPAN implementation'
   }
@@ -51,13 +51,12 @@ sub build_routes {
     $$urlmap->mount('/authors/id' => Web::Machine->new(
         resource => 'XAS::Service::Resource::Darkpan::Downloads',
         resource_args => [
-            alias     => 'authors_download',
-            root      => Dir($dpath, 'authors', 'id'),
-            processor => XAS::Darkpan::Process::Authors->new(
-                -schema  => $schema,
-                -lockmgr => $lockmgr,
-                -path    => Dir($dpath, 'authors', 'id'),
-                -mirror  => $mirror->copy()
+            alias    => 'authors_download',
+            root     => Dir($dpath),
+            mirror   => $mirror->copy(),
+            database => XAS::Darkpan::DB::Packages->new(
+                -schema => $schema,
+                -url    => $mirror->copy()
             )
         ])
     );

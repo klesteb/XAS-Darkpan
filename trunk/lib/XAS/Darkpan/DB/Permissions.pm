@@ -30,6 +30,12 @@ use XAS::Class
 #use Data::Dumper;
 
 # ----------------------------------------------------------------------
+# Compiled regex's
+# ----------------------------------------------------------------------
+
+my $PERMS = qr/m|f|c/;
+
+# ----------------------------------------------------------------------
 # Public Methods
 # ----------------------------------------------------------------------
 
@@ -52,7 +58,7 @@ sub add {
     my $p = validate_params(\@_, {
         -pauseid => 1,
         -module  => 1,
-        -perms   => 1,
+        -perms   => { regex => $PERMS },
         -mirror  => { optional => 1, default => 'http://www.cpan.org' },
     });
 
@@ -62,6 +68,36 @@ sub add {
     $p->{'datetime'} = dt2db($dt);
 
     return Permissions->create_record($schema, $p);
+
+}
+
+sub update {
+    my $self = shift;
+    my $p = validate_params(\@_, {
+        -id      => 1,
+        -pauseid => { optional => 1, default => undef },
+        -module  => { optional => 1, default => undef },
+        -perms   => { optional => 1, default => undef },
+        -mirror  => { optional => 1, default => undef },
+    });
+
+    my $data;
+    my $schema = $self->schema;
+    my $dt = DateTime->now(time_zone => 'local');
+
+    $data->{'id'}       = $p->{'id'};
+    $data->{'pauseid'}  = $p->{'pauseid'} if (defined($p->{'pauseid'}));
+    $data->{'module'}   = $p->{'module'}  if (defined($p->{'module'}));
+    $data->{'mirror'}   = $p->{'mirror'}  if (defined($p->{'mirror'}));
+    $data->{'datetime'} = dt2db($dt);
+
+    if ((defined($p->{'perms'})) && ($p->{'perms'} =~ $PERMS)) {
+        
+        $data->{'perms'} = $p->{'perms'}   
+        
+    }
+        
+    return Permissions->update_record($schema, $data);
 
 }
 
@@ -103,6 +139,19 @@ sub search {
     my $schema = $self->schema;
 
     return Permissions->search($schema, $p->{'criteria'}, $p->{'options'});
+
+}
+
+sub find {
+    my $self = shift;
+    my $p = validate_params(\@_, {
+        -criteria => { optional => 1, default => {}, type => HASHREF },
+        -options  => { optional => 1, default => {}, type => HASHREF},
+    });
+
+    my $schema = $self->schema;
+
+    return Permissions->find($schema, $p->{'criteria'}, $p->{'options'});
 
 }
 

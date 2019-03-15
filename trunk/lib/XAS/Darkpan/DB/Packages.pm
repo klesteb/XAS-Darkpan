@@ -54,8 +54,6 @@ sub add {
        -mirror => 1,
     });
 
-    my $results;
-    my $criteria;
     my $schema = $self->schema;
     my $dt = DateTime->now(time_zone => 'local');
     my $info = CPAN::DistnameInfo->new($p->{'path'});
@@ -73,9 +71,47 @@ sub add {
         pathname  => $info->pathname,
         mirror    => $p->{'mirror'},
         datetime  => dt2db($dt),
+        downloads => 0,
     };
 
     return Packages->create_record($schema, $data); 
+
+}
+
+sub update {
+    my $self = shift;
+    my $p = validate_params(\@_, {
+       -id        => 1,
+       -package   => { optional => 1, default => undef },
+       -dist      => { optional => 1, default => undef },
+       -version   => { optional => 1, default => undef },
+       -maturity  => { optional => 1, default => undef },
+       -filename  => { optional => 1, default => undef },
+       -pauseid   => { optional => 1, default => undef },
+       -extension => { optional => 1, default => undef },
+       -pathname  => { optional => 1, default => undef },
+       -mirror    => { optional => 1, default => undef },
+       -downloads => { optional => 1, default => undef },
+    });
+
+	my $data;
+    my $schema = $self->schema;
+    my $dt = DateTime->now(time_zone => 'local');
+
+    $data->{'id'}        = $p->{'id'};
+    $data->{'package'}   = $p->{'package'}   if (defined($p->{'package'}));
+    $data->{'dist'}      = $p->{'dist'}      if (defined($p->{'dist'}));
+    $data->{'version'}   = $p->{'version'}   if (defined($p->{'version'}));
+    $data->{'maturity'}  = $p->{'maturity'}  if (defined($p->{'maturity'}));
+    $data->{'filename'}  = $p->{'filename'}  if (defined($p->{'filename'}));
+    $data->{'pauseid'}   = $p->{'pauseid'}   if (defined($p->{'pauseid'}));
+    $data->{'extension'} = $p->{'extension'} if (defined($p->{'extension'}));
+    $data->{'pathname'}  = $p->{'pathname'}  if (defined($p->{'pathname'}));
+    $data->{'mirror'}    = $p->{'mirror'}    if (defined($p->{'mirror'}));
+    $data->{'downloads'} = $p->{'downloads'} if (defined($p->{'downloads'}));
+    $data->{'datetime'}  = dt2db($dt),
+
+    return Packages->update_record($schema, $data); 
 
 }
 
@@ -134,6 +170,19 @@ sub search {
     my $schema = $self->schema;
 
     return Packages->search($schema, $p->{'criteria'}, $p->{'options'});
+
+}
+
+sub find {
+    my $self = shift;
+    my $p = validate_params(\@_, {
+       -criteria => { optional => 1, type => HASHREF, default => {} },
+       -options  => { optional => 1, type => HASHREF, default => {} },
+    });
+
+    my $schema = $self->schema;
+
+    return Packages->find($schema, $p->{'criteria'}, $p->{'options'});
 
 }
 

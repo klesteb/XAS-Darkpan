@@ -63,6 +63,11 @@ __PACKAGE__->add_columns(
         size          => 255,
         default_value => 'http://www.cpan.org',
     },
+    downloads => {
+        data_type     => 'integer',
+        default_value => 0,
+        is_nullable   => 1,
+    },
     datetime => {
         data_type     => 'datetime',
         is_nullable   => 0,

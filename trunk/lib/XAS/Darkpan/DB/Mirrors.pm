@@ -67,6 +67,27 @@ sub add {
     
 }
 
+sub update {
+    my $self = shift;
+    my $p = validate_params(\@_, {
+        -id     => 1,
+        -mirror => { optional => 1, default => undef },
+        -type   => { optional => 1, default => undef },
+    });
+
+    my $data;
+    my $schema = $self->schema;
+    my $dt = DateTime->now(time_zone => 'local');
+
+    $data->{'id'}       = $p->{'id'};
+    $data->{'mirror'}   = $p->{'mirror'} if (defined($p->{'mirror'}));
+    $data->{'type'}     = $p->{'type'}   if (defined($p->{'type'}));
+    $data->{'datetime'} = dt2db($dt);
+
+    return  Mirrors->update_record($schema, $data);
+    
+}
+
 sub data {
     my $self = shift;
     my $p = validate_params(\@_, {
@@ -110,6 +131,19 @@ sub search {
     my $schema = $self->schema;
 
     return Mirrors->search($schema, $p->{'criteria'}, $p->{'options'});
+
+}
+
+sub find {
+    my $self = shift;
+    my $p = validate_params(\@_, {
+        -criteria => { optional => 1, default => {}, type => HASHREF },
+        -options  => { optional => 1, default => {}, type => HASHREF },
+    });
+
+    my $schema = $self->schema;
+
+    return Mirrors->find($schema, $p->{'criteria'}, $p->{'options'});
 
 }
 
