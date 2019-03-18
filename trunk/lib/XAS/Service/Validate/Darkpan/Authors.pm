@@ -55,7 +55,7 @@ __END__
 
 =head1 NAME
 
-XAS::Service::Validate::DArkpan::Authors - A class to verify the Authors profile.
+XAS::Service::Validate::Darkpan::Authors - A class to verify the Authors profile.
 
 =head1 SYNOPSIS
 
@@ -69,6 +69,7 @@ XAS::Service::Validate::DArkpan::Authors - A class to verify the Authors profile
 
 =head1 DESCRIPTION
 
+This modules provides the validation routines for validating parameters.
 
 =head1 METHODS
 
@@ -92,9 +93,9 @@ The parameters to verify against the profile.
 
 =over 4
 
-=item L<XAS::Service|XAS::Service>
-
 =item L<XAS::Darkpan|XAS::Darkpan>
+
+=item L<XAS::Service|XAS::Service>
 
 =item L<XAS|XAS>
 
@@ -111,6 +112,5 @@ Copyright (C) 2012-2019 by Kevin L. Esteb
 This is free software; you can redistribute it and/or modify it under
 the terms of the Artistic License 2.0. For details, see the full text
 of the license at http://www.perlfoundation.org/artistic_license_2_0.
-
 
 =cut

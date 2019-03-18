@@ -60,40 +60,37 @@ sub valid_url {
 
 =head1 NAME
 
-XAS::Service::Profiles::Darkpan::Authors - A class for creating standard validation profiles.
+XAS::Service::Profiles::Darkpan::Constraints - A class for creating Data::FormValidator constraints.
 
 =head1 SYNOPSIS
 
- my $profile  = XAS::Service::Profiles::Darkpan::Authors->build();
- my $validate = XAS::Service::Profiles->new($profile);
+ use XAS::Service::Profiles::Darkpan::Constraints ':all';
 
 =head1 DESCRIPTION
 
-This module creates a standardized
-L<Data::FormValidator|https://metacpan.org/pod/Data::FormValidator> validation
-profile for searches.
+This module provides constraints the are usable with 
+L<Data::FormValidator|https://metacpan.org/pod/Data::FormValidator>
+parameter validation.
 
 =head1 METHODS
 
-=head2 new($fields)
+=head2 valid_email
 
-Initializes the vaildation profile.
+This constriant checks to see if an email address is conformant with
+RFC 822 and wither a MX record exists for the domain.
 
-=over 4
+=head2 valid_url
 
-=item B<$field>
-
-An array ref of field names that may appear in search requests.
-
-=back
+This constraint checks for a valid URL. It doesn't verify that the URL is
+workable.
 
 =head1 SEE ALSO
 
 =over 4
 
-=item L<XAS::Service|XAS::Service>
-
 =item L<XAS::Darkpan|XAS::Darkpan>
+
+=item L<XAS::Service|XAS::Service>
 
 =item L<XAS|XAS>
 

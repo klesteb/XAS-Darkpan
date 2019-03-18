@@ -23,8 +23,14 @@ sub get_navigation {
         link => '/api/authors',
         text => 'Authors'
     },{
-        link => '/api/modules',
-        text => 'Modules'
+        link => '/api/packages',
+        text => 'Packages'
+    },{
+        link => '/api/mirrors',
+        text => 'Mirrors'
+    },{
+        link => '/api/permissions',
+        text => 'Permissions'
     }];
 
 }
@@ -41,8 +47,14 @@ sub get_links {
             title => 'Authors',
             href  => '/api/authors',
         },{
-            title => 'Modules',
-            href  => '/api/modules',
+            title => 'Packages',
+            href  => '/api/packages',
+        },{
+            title => 'Mirrors',
+            href  => '/api/mirrors',
+        },{
+            title => 'Permissions',
+            href  => '/api/permissions',
         }],
     };
 
@@ -84,9 +96,9 @@ XAS::Service::Resource::Darkpan::Root - Perl extension for the XAS environment
 =head1 DESCRIPTION
 
 This module inherits from L<XAS::Service::Resource|XAS::Service::Resource>. It
-provides a link to "/" and the services it provides.
+provides a link to "/api" and the services it provides.
 
-=head1 METHODS - Web::Machine
+=head1 METHODS - Web::Machine::Resources
 
 No overrides needed.
 

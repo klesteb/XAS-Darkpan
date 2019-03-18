@@ -80,9 +80,9 @@ Initializes the vaildation profile.
 
 =over 4
 
-=item L<XAS::Service|XAS::Service>
-
 =item L<XAS::Darkpan|XAS::Darkpan>
+
+=item L<XAS::Service|XAS::Service>
 
 =item L<XAS|XAS>
 

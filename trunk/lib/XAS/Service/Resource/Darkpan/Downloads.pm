@@ -3,6 +3,8 @@ package XAS::Service::Resource::Darkpan::Downloads;
 use strict;
 use warnings;
 
+our $VERSION = '0.01';
+
 use POE;
 use DateTime;
 use Try::Tiny;
@@ -13,7 +15,7 @@ use MIME::Types 'by_suffix';
 use Badger::Filesystem 'File Dir';
 use parent 'Web::Machine::Resource';
 
-use Data::Dumper;
+#use Data::Dumper;
 
 # -------------------------------------------------------------------------
 # Web::Machine::Resource overrides
@@ -250,7 +252,7 @@ XAS::Service::Resource::Darkpan::Downloads - Perl extension for the XAS environm
     my $schema  = XAS::Model::Database->opendb('darkpan;);
     my $mirror = Badger::URL->new('http://localhost:8080');
 
-    $builder->mount('/authors' => Web::Machine->new(
+    $builder->mount('/authors/id' => Web::Machine->new(
         resource => 'XAS::Service::Resource::Darkpan::Downloads',
         resource_args => [
             alias    => 'downloader',
@@ -265,26 +267,61 @@ XAS::Service::Resource::Darkpan::Downloads - Perl extension for the XAS environm
 
 =head1 DESCRIPTION
 
-This module inherits from L<XAS::Service::Resource|XAS::Service::Resource>. It
-provides a link to "/rexec/logs" and the services it provides.
+This module inherits from 
+L<Web::Machine::Resource|https://metacpan.org/pod/Web::Machine::Resource>. 
+It provides a link to "/authors/id" and the services it provides.
 
-Logs are associated with jobs. Not all jobs will create a log. Logs are
-deleted when jobs are deleted.
+=head1 METHODS - Web::Machine::Resource
 
-=head1 METHODS - Web::Machine
+Web::Machine::Resource provides callbacks for processing the request. These 
+callbacks have been overridden.
 
-Web::Machine provides callbacks for processing the request. These have been
-overridden.
+=head2 init
 
-=head2 resource_exists
+Intilializes the module. It takes the following parameters:
 
-This method checks to see if the job exists within the database.
+=over 4
 
-=head2 finish_reqest
+=item B<mirror>
 
-This method writes out a log entry..
+The mirror to reference when doing look ups. Defaults to http://localhost:8080
+
+=item B<root>
+
+The file system path to the darkpan repository. Defaults to $XAS_LIB/darkpan.
+
+=item B<database>
+
+The database manipulation package to use.
+
+=item B<alias>
+
+The POE session alias.
+
+=back
+
+=head2 malformed_request
+
+This method ckecks to see it the requested resource exists. It does this
+by checking in the database first and then for on disk files. The on
+disk files would be *.CHECKSUM and *.readme files.
+
+=head2 content_types_provided 
+
+This method maps the requested content type with a loader. 
+
+=head2 finish_request
+
+This method writes out a log entry and updates the download count for
+packages.
 
 =head1 METHODS - Ours
+
+These methods provide a supporting role for Web::Machine::Resource.
+
+=head2 loader
+
+Loads the content and determines the mime type.
 
 =head1 SEE ALSO
 
