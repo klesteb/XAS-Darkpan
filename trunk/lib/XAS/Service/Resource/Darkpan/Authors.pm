@@ -178,7 +178,12 @@ sub delete_resource {
 
     if (my $id = bind_path('/:id', $path)) {
 
-
+        if ($self->authors->database->remove($id)) {
+            
+            $stat = 1;
+            
+        }
+        
     }
 
     return $stat;
@@ -234,10 +239,10 @@ sub get_response {
         my $criteria = shift;
         my $options  = shift;
 
-        my $data = $self->authors->search(-criteria => $criteria, -options => $options);
+        my $recs = $self->authors->search(-criteria => $criteria, -options => $options);
 
-        while (my $datum = $data->next) {
-            
+        while (my $datum = $recs->next) {
+
             my $rec = $self->build_response($datum);
             push(@{$data->{'_embedded'}->{'authors'}}, $rec);
 
@@ -245,9 +250,6 @@ sub get_response {
 
         $data->{'_links'}->{'children'} = [{
             title => 'Create',
-            href  => '/api/authors/create',
-        },{
-            title => 'List',
             href  => '/api/authors',
         }];
     };
@@ -282,6 +284,8 @@ sub get_response {
 
     }
 
+    $self->log->debug(sprintf("%s: get_response: %s", $alias, Dumper($data)));
+        
     return $data;
 
 }
@@ -370,22 +374,10 @@ sub handle_action {
     my $action = shift;
     my $params = shift;
 
-    my $stat = 0;
+    my $stat = 1;
     my $alias = $self->alias;
 
     $self->log->debug(sprintf("%s: handle_action: %s", $alias, $action));
-
-    if ($action eq 'start') {
-
-    } elsif ($action eq 'resume') {
-
-    } elsif ($action eq 'pause') {
-
-    } elsif ($action eq 'stop') {
-
-    } elsif ($action eq 'kill') {
-
-    }
 
     return $stat;
 
@@ -402,8 +394,8 @@ sub build_20X {
     $data->{'_links'}     = $self->get_links();
     $data->{'navigation'} = $self->get_navigation();
 
-    if (my $author = $self->get_author($id)) {
-
+    if (my $author = $self->authors->find(-criteria => { id => $id })) {
+        
         my $info = $self->build_response($author);
         $data->{'_embedded'}->{'authors'} = $info;
 
@@ -436,7 +428,7 @@ sub post_data {
 
     my $results = Authors->create_record($schema, $data);
 
-    return $results->id;
+    return $results->{'id'};
 
 }
 
@@ -460,8 +452,6 @@ sub build_response {
     $data->{'mirror'}   = $rec->mirror;
     $data->{'datetime'} = dt2db($rec->datetime);
     
-$self->log->info(Dumper($data));
-      
     return $data;
 
 }

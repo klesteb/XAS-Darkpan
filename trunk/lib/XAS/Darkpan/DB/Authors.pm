@@ -39,10 +39,10 @@ sub remove {
 
     my $schema = $self->schema;
     my $criteria = {
-        pauseid => $id
+        id => $id
     };
 
-    Authors->delete_records($schema, $criteria);
+    return Authors->delete_records($schema, $criteria);
 
 }
 
