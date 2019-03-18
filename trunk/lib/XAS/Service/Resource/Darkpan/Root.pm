@@ -3,6 +3,8 @@ package XAS::Service::Resource::Darkpan::Root;
 use strict;
 use warnings;
 
+our $VERSION = '0.01';
+
 use parent 'XAS::Service::Resource';
 
 # -------------------------------------------------------------------------

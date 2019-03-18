@@ -8,9 +8,12 @@ use Badger::URL 'URL';
 use Badger::Class
   debug   => 0,
   version => $VERSION,
+  base    => 'Badger::Exporter',
   exports => {
-      all => 'valid_url valid_email',
-      constraints => 'valid_url valid_email'
+    all => 'valid_url valid_email',
+    tags => {
+       constraints => 'valid_url valid_email'
+    }
   }
 ;
 
@@ -40,6 +43,7 @@ sub valid_email {
 sub valid_url {
 
     return sub {
+        my $dfv = shift;
         
         $dfv->name_this('url');
         

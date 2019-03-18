@@ -3,6 +3,8 @@ package XAS::Service::Resource::Darkpan::Authors;
 use strict;
 use warnings;
 
+our $VERSION = '0.01';
+
 use POE;
 use DateTime;
 use Try::Tiny;
@@ -25,8 +27,8 @@ sub init {
 
     $self->SUPER::init($args);
 
-    $self->{'authors'} = args->{'processor');
-    
+    $self->{'authors'} = $args->{'processor'};
+
     my @fields = $self->authors->database->fields();
 
     $self->{'validate'} = XAS::Service::Validate::Darkpan::Authors->new();
@@ -44,31 +46,61 @@ sub create_path {
 sub malformed_request {
     my $self = shift;
 
-    my $stat   = 0;
+    my $stat   = 1;
     my $alias  = $self->alias;
     my $method = $self->request->method;
     my $path   = $self->request->path_info;
 
     $self->log->debug("$alias:  malformed_request - $path");
 
-    if (my $id = bind_path('/:id', $path)) {
+    if ($method eq 'GET') {
 
-        if ($method eq 'GET') {
+        $stat = 0;
+        
+        if (my $id = bind_path('/:id', $path)) {
 
-            unless (($id eq '_search') or ($id eq 'list')) {
+            unless ($id eq '_search') {
 
+                if ($self->authors->database->find(-criteria => { id => $id })) {
 
+                    $stat = 0;
+                    
+                }
+                
             }
+            
+        }
 
-        } elsif ($method eq 'DELETE') {
+    } elsif ($method eq 'DELETE') {
 
+        if (my $id = bind_path('/:id', $path)) {
 
-        } elsif ($method eq 'POST') {
+            if ($self->authors->database->find(-criteria => { id => $id })) {
+                
+                $stat = 0;
+                
+            }
+            
+        }
 
+    } elsif ($method eq 'POST') {
 
-        } elsif ($method eq 'PUT') {
+        if (my $id = bind_path('/:id', $path)) {
+                
+            $stat = 1;
+                
+        }
+            
+    } elsif ($method eq 'PUT') {
 
+        if (my $id = bind_path('/:id', $path)) {
 
+            if ($self->authors->database->find(-criteria => { id => $id })) {
+                
+                $stat = 0;
+                
+            }
+            
         }
 
     }
@@ -80,6 +112,8 @@ sub malformed_request {
 sub resource_exists {
     my $self = shift;
 
+    # for form processing
+    
     my $stat   = 0;
     my $alias  = $self->alias;
     my $method = $self->request->method;
@@ -87,20 +121,44 @@ sub resource_exists {
 
     $self->log->debug(sprintf("%s: resource_exists: %s - %s\n", $alias, $path, $method));
 
-    if (my $id = bind_path('/:id', $path)) {
+    if ($method eq 'DELETE') {
 
-        if ($method eq 'DELETE') {
+        if (my $id = bind_path('/:id', $path)) {
 
+            if ($self->authors->database->find(-criteria => { id => $id })) {
+                
+                $stat = 1;
+                
+            }
+            
+        }
 
-        } elsif ($method eq 'POST') {
+    } elsif ($method eq 'PUT') {
 
+        if (my $id = bind_path('/:id', $path)) {
 
-        } elsif ($method eq 'PUT') {
+            if ($self->authors->database->find(-criteria => { id => $id })) {
+                
+                $stat = 1;
+                
+            }
+            
+        }
 
+    } elsif ($method eq 'GET') {
 
-        } elsif ($method eq 'GET') {
+        if (my $id = bind_path('/:id', $path)) {
 
+            if ($self->authors->database->find(-criteria => { id => $id })) {
+                
+                $stat = 1;
+                
+            }
 
+        } else {
+            
+            $stat = 1;
+            
         }
 
     }
@@ -114,7 +172,6 @@ sub delete_resource {
 
     my $stat  = 0;
     my $alias = $self->alias;
-    my $controller = $self->controller;
     my $path  = $self->request->path_info;
 
     $self->log->debug("$alias: authors delete_resource - $path");
@@ -154,8 +211,8 @@ sub get_links {
             href  => '/api',
         },
         self => {
-            title => 'Authors',
-            href  => '/api/authors',
+          title => 'Authors',
+          href  => '/api/authors',
         },
     };
 
@@ -177,15 +234,15 @@ sub get_response {
         my $criteria = shift;
         my $options  = shift;
 
-        my $data = $self->authors->search(-criteria => $criteria, -options => $option);
+        my $data = $self->authors->search(-criteria => $criteria, -options => $options);
 
-        foreach my $datum (@$data) {
+        while (my $datum = $data->next) {
             
             my $rec = $self->build_response($datum);
             push(@{$data->{'_embedded'}->{'authors'}}, $rec);
-            
+
         }
-        
+
         $data->{'_links'}->{'children'} = [{
             title => 'Create',
             href  => '/api/authors/create',
@@ -206,12 +263,12 @@ sub get_response {
             my ($criteria, $options) = $self->search->build($params);
 
             $build_data->($criteria, $options);
-            
+
         } else {
 
             my $options = {};
             my $criteria = { id => $id };
-            
+
             $build_data->($criteria, $options);
 
         }
@@ -348,7 +405,7 @@ sub build_20X {
     if (my $author = $self->get_author($id)) {
 
         my $info = $self->build_response($author);
-        $data->{'_embedded'}->{'author'} = $info;
+        $data->{'_embedded'}->{'authors'} = $info;
 
     }
 
@@ -376,7 +433,7 @@ sub post_data {
         mirror   => $params->{'mirror'},
         datetime => $dt,
     };
-        
+
     my $results = Authors->create_record($schema, $data);
 
     return $results->id;
@@ -392,21 +449,19 @@ sub build_response {
         _links => {
             self   => { href => "/api/authors/$id", title => 'Self' },
             delete => { href => "/api/authors/$id", title => 'Delete' },
-            edit   => { href => "/api/authors/$id", title => 'Edit' },
+            update => { href => "/api/authors/$id", title => 'Update' },
         }
     };
 
-    while (my ($key, $value) = each(%$rec)) {
-
-        $data->{$key} = $value;
-
-    }
-
-    $data->{'id'} = $id;
-
-    delete $data->{'id'};
-    delete $data->{'revision'};
-
+    $data->{'id'}       = $id;
+    $data->{'pauseid'}  = $rec->pauseid;
+    $data->{'name'}     = $rec->name;
+    $data->{'email'}    = $rec->email;
+    $data->{'mirror'}   = $rec->mirror;
+    $data->{'datetime'} = dt2db($rec->datetime);
+    
+$self->log->info(Dumper($data));
+      
     return $data;
 
 }
@@ -425,46 +480,46 @@ sub create_form {
         enctype => 'application/x-www-form-urlencoded',
         url     => '/api/authors',
         items => [{
-            type  => 'hidden',
-            name  => 'action',
-            value => 'POST',
-        },{
-            type => 'fieldset',
-            legend => 'Create a new Author',
-            fields => [{
-                id       => 'username',
-                label    => 'Username',
-                type     => 'textfield',
-                name     => 'username',
-                tabindex => 2,
-                required => 1,
-            },{
-                id       => 'name',
-                label    => 'name',
-                type     => 'textfield',
-                name     => 'name',
-                tabindex => 3,
-                required => 1,
-            },{
-                id       => 'email',
-                label    => 'email',
-                type     => 'textfield',
-                name     => 'email',
-                tabindex => 5,
-                required => 1,
-            },{
-                id       => 'mirror',
-                label    => 'mirror',
-                type     => 'textfield',
-                name     => 'mirror',
-                value    => 'http://www.cpan.org',
-                tabindex => 6,
-                required => 0,
-            }]
-        },{
-            type => 'standard_buttons',
-            tabindex => 7,
-        }]
+                      type  => 'hidden',
+                      name  => 'action',
+                      value => 'POST',
+                  },{
+                      type => 'fieldset',
+                        legend => 'Create a new Author',
+                        fields => [{
+                                       id       => 'username',
+                                       label    => 'Username',
+                                       type     => 'textfield',
+                                       name     => 'username',
+                                       tabindex => 2,
+                                       required => 1,
+                                   },{
+                                       id       => 'name',
+                                         label    => 'name',
+                                         type     => 'textfield',
+                                         name     => 'name',
+                                         tabindex => 3,
+                                         required => 1,
+                                   },{
+                                       id       => 'email',
+                                         label    => 'email',
+                                         type     => 'textfield',
+                                         name     => 'email',
+                                         tabindex => 5,
+                                         required => 1,
+                                   },{
+                                       id       => 'mirror',
+                                         label    => 'mirror',
+                                         type     => 'textfield',
+                                         name     => 'mirror',
+                                         value    => 'http://www.cpan.org',
+                                         tabindex => 6,
+                                         required => 0,
+                                   }]
+                  },{
+                      type => 'standard_buttons',
+                        tabindex => 7,
+                  }]
     };
 
     return $form;
@@ -491,9 +546,9 @@ sub validate {
 
 sub authors {
     my $self = shift;
-    
+
     return $self->{'authors'};
-    
+
 }
 
 1;

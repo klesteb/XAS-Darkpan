@@ -12,6 +12,7 @@ use XAS::Model::Schema;
 use Plack::App::URLMap;
 use XAS::Service::Server;
 use XAS::Darkpan::DB::Packages;
+use XAS::Darkpan::Process::Authors;
 
 use XAS::Class
   version    => '0.01',
@@ -48,6 +49,10 @@ sub build_routes {
     my $lockmgr = XAS::Lib::Lockmgr->new();
     my $schema  = XAS::Model::Schema->opendb('darkpan');
     
+    $$urlmap->mount('/modules' => Plack::App::File->new(
+        root => Dir($dpath, '/modules')->path )
+    );
+
     $$urlmap->mount('/authors/id' => Web::Machine->new(
         resource => 'XAS::Service::Resource::Darkpan::Downloads',
         resource_args => [
@@ -65,39 +70,35 @@ sub build_routes {
         root => Dir($dpath, '/authors')->path )
     );
 
-    $$urlmap->mount('/modules' => Plack::App::File->new(
-        root => Dir($dpath, '/modules')->path )
+    $$urlmap->mount('/api/authors' => Web::Machine->new(
+        resource => 'XAS::Service::Resource::Darkpan::Authors',
+        resource_args => [
+            alias           => 'authors',
+            template        => $template,
+            json            => $json,
+            app_name        => $name,
+            app_description => $description,
+            authenticator   => $authen,
+            processor       => XAS::Darkpan::Process::Authors->new(
+                -schema  => $schema,
+                -lockmgr => $lockmgr,
+                -path    => Dir($dpath, 'authors', 'id'),
+                -mirror  => $mirror->copy()
+            )
+        ])
     );
 
-    # $$urlmap->mount('/api' => Web::Machine->new(
-    #     resource => 'XAS::Service::Resource::Darkpan::Root',
-    #     resource_args => [
-    #         alias           => 'root',
-    #         template        => $template,
-    #         json            => $json,
-    #         app_name        => $name,
-    #         app_description => $description,
-    #         authenticator   => $authen,
-    #     ] )
-    # );
-
-    # $$urlmap->mount('/api/authors' => Web::Machine->new(
-    #     resource => 'XAS::Service::Resource::Darkpan::Authors',
-    #     resource_args => [
-    #         alias           => 'authors',
-    #         template        => $template,
-    #         json            => $json,
-    #         app_name        => $name,
-    #         app_description => $description,
-    #         authenticator   => $authen,
-    #         processor       => XAS::Darkpan::Process::Authors->new(
-    #             -schema  => $schema,
-    #             -lockmgr => $lockmgr,
-    #             -path    => Dir($dpath, 'authors', 'id'),
-    #             -mirror  => $mirror->copy()
-    #         );
-    #     ])
-    # );
+    $$urlmap->mount('/api' => Web::Machine->new(
+        resource => 'XAS::Service::Resource::Darkpan::Root',
+        resource_args => [
+            alias           => 'root',
+            template        => $template,
+            json            => $json,
+            app_name        => $name,
+            app_description => $description,
+            authenticator   => $authen,
+        ] )
+    );
 
 }
 
