@@ -3,11 +3,11 @@
 #             Copyright (c) 2019 Kevin L. Esteb All Rights Reserved
 #
 #
-# TITLE:       xas-darkpan
+# TITLE:       dpan-mangerd
 #
 # FACILITY:    XAS
 #
-# ABSTRACT:    This procedure runs a local CPAN repository 
+# ABSTRACT:    A micro service based manager for the  local CPAN repository 
 #
 # ENVIRONMENT: XAS Operations Environment
 #
@@ -40,12 +40,12 @@ use lib '/home/kevin/dev/XAS-Model/trunk/lib';
 use lib '/home/kevin/dev/XAS-Service/trunk/lib';
 use lib '/home/kevin/dev/XAS-Darkpan/trunk/lib';
 
-use XAS::Apps::Darkpan::Processor;
+use XAS::Apps::Darkpan::Manager;
 
 main: {
 
-    my $app = XAS::Apps::Darkpan::Processor->new(
-        -throws => 'xas-darkpand',
+    my $app = XAS::Apps::Darkpan::Manager->new(
+        -throws => 'dpan-managerd',
     );
 
     exit $app->run();
@@ -56,11 +56,11 @@ __END__
 
 =head1 NAME
 
-xas-darkpan - a local CPAN repository
+dpan-manager - a management micro service fo the local CPAN repository
 
 =head1 SYNOPSIS
 
-xas-testd [--help] [--debug] [--manual] [--version]
+dpan-managerd [--help] [--debug] [--manual] [--version]
 
  options:
    --help         outputs simple help text
@@ -76,7 +76,7 @@ xas-testd [--help] [--debug] [--manual] [--version]
 
 =head1 DESCRIPTION
 
-This procedure is a simple example for micro services.
+This procedure is the management services for the local CPAN respository.
 
 =head1 CONFIGURATION
 
@@ -140,6 +140,10 @@ convention.
 =head1 SEE ALSO
 
 =over 4
+
+=item L<XAS::Darkpan|XAS::Darkpan>
+
+=item L<XAS::Service|XAS::Service>
 
 =item L<XAS|XAS>
 

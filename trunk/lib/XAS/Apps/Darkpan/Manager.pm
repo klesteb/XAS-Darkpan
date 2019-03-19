@@ -1,4 +1,4 @@
-package XAS::Apps::Darkpan::Processor;
+package XAS::Apps::Darkpan::Manager;
 
 use Template;
 use JSON::XS;
@@ -22,9 +22,9 @@ use XAS::Class
   filesystem => 'File Dir',
   accessors  => 'cfg',
   vars => {
-      SERVICE_NAME         => 'XAS_DARKPAND',
-      SERVICE_DISPLAY_NAME => 'XAS Darkpan',
-      SERVICE_DESCRIPTION  => 'A local CPAN implementation'
+      SERVICE_NAME         => 'DPAN_MANAGER',
+      SERVICE_DISPLAY_NAME => 'DPAN Manager',
+      SERVICE_DESCRIPTION  => 'The manager for the local CPAN implementation'
   }
 ;
 
@@ -49,25 +49,34 @@ sub build_routes {
     my $lockmgr = XAS::Lib::Lockmgr->new();
     my $schema  = XAS::Model::Schema->opendb('darkpan');
     
-    $$urlmap->mount('/authors/id' => Web::Machine->new(
-        resource => 'XAS::Service::Resource::Darkpan::Downloads',
+    $$urlmap->mount('/api/authors' => Web::Machine->new(
+        resource => 'XAS::Service::Resource::Darkpan::Authors',
         resource_args => [
-            alias    => 'downloader',
-            root     => Dir($dpath),
-            mirror   => $mirror->copy(),
-            database => XAS::Darkpan::DB::Packages->new(
-                -schema => $schema,
-                -url    => $mirror->copy()
+            alias           => 'authors',
+            template        => $template,
+            json            => $json,
+            app_name        => $name,
+            app_description => $description,
+            authenticator   => $authen,
+            processor       => XAS::Darkpan::Process::Authors->new(
+                -schema  => $schema,
+                -lockmgr => $lockmgr,
+                -path    => Dir($dpath, 'authors', 'id'),
+                -mirror  => $mirror->copy()
             )
         ])
     );
 
-    $$urlmap->mount('/authors' => Plack::App::File->new(
-        root => Dir($dpath, '/authtors')->path )
-    );
-
-    $$urlmap->mount('/modules' => Plack::App::File->new(
-        root => Dir($dpath, '/modules')->path )
+    $$urlmap->mount('/api' => Web::Machine->new(
+        resource => 'XAS::Service::Resource::Darkpan::Root',
+        resource_args => [
+            alias           => 'root',
+            template        => $template,
+            json            => $json,
+            app_name        => $name,
+            app_description => $description,
+            authenticator   => $authen,
+        ] )
     );
 
 }
@@ -78,6 +87,18 @@ sub build_static {
     my $root   = shift;
     
     # static routes
+
+    $$urlmap->mount('/js' => Plack::App::File->new(
+        root => Dir($root, '/js')->path )
+    );
+
+    $$urlmap->mount('/css' => Plack::App::File->new(
+        root => Dir($root, '/css')->path )
+    );
+
+    $$urlmap->mount('/yaml' => Plack::App::File->new(
+        root => Dir($root, '/yaml/yaml')->path )
+    );
 
 }
 
@@ -111,8 +132,6 @@ sub build_app {
     my @paths;
     my $def_root = Dir($self->env->lib, 'darkpan');
 
-    $self->log->info(sprintf("def_root: %s", $def_root));
-    
     my $path = Dir($self->env->lib, 'web', 'root');
     my $root = Dir($self->cfg->val('app', 'root', $path->path));
     my $base = Dir($self->cfg->val('app', 'base', $path->path));
@@ -201,19 +220,20 @@ __END__
 
 =head1 NAME
 
-XAS::Apps::Darkpan::Processor - This module provides micro CPAN
+XAS::Apps::Darkpan::Manager - This module provides managemant services
 
 =head1 SYNOPSIS
 
- use XAS::Apps::Darkpan::Processor;
+ use XAS::Apps::Darkpan::Manager;
 
- my $app = XAS::Apps::Processor::Processor->new();
+ my $app = XAS::Apps::Processor::Manager->new();
 
  exit $app->run();
 
 =head1 DESCRIPTION
 
-This module module provides a micro CPAN.
+This module module provides a management micro service to the local CPAN
+repository.
 
 =head1 CONFIGURATION
 
@@ -235,27 +255,16 @@ port 9507 on the 127.0.0.1 network.
 This stanza defines where the root directory for html assets are stored and
 the name and description of the micro service.
 
- [darkpan]
- path = /var/lib/xas/darkpan
- mirror = http://localhost:8080
-
-This stanza defines where the local darkpan resides and the default mirror
-for it.
-
 =head1 EXAMPLE
 
  [system]
- port = 8080
+ port = 9507
  address = 127.0.0.1
 
  [app]
  base = /var/lib/xas/web
  name = My Great service
  description = This is a really great service
-
- [darkpan] 
- path = /var/lib/xas/darkpan
- mirror = http://localhost:8080
 
 =head1 SEE ALSO
 
