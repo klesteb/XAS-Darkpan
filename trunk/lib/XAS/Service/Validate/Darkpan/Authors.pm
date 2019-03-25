@@ -28,7 +28,7 @@ sub check {
 
     my $params = $multi->as_hashref;
 
-    return $self->check_parameters($params, 'jobs');
+    return $self->check_parameters($params, 'authors');
 
 }
 

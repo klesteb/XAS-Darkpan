@@ -178,7 +178,7 @@ sub setup {
 
     my $interface = XAS::Service::Server->new(
         -alias   => 'interface',
-        -port    => $self->cfg->val('system', 'port', 8080),
+        -port    => $self->cfg->val('system', 'port', 8081),
         -address => $self->cfg->val('system', 'address', 'localhost'),
         -app     => $self->build_app,
     );
@@ -241,7 +241,7 @@ The configuration file follows the familiar Windows .ini format. It contains
 following stanzas.
 
  [system]
- port = 9507
+ port = 8081
  address = 127.0.0.1
 
 This stanza defines the network interface. By default the process listens on
@@ -258,7 +258,7 @@ the name and description of the micro service.
 =head1 EXAMPLE
 
  [system]
- port = 9507
+ port = 8081
  address = 127.0.0.1
 
  [app]

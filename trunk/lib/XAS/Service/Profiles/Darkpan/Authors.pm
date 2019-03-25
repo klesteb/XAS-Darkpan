@@ -3,6 +3,7 @@ package XAS::Service::Profiles::Darkpan::Authors;
 our $VERSION = '0.01';
 
 use XAS::Service::Profiles::Darkpan::Constraints ':all';
+use Data::FormValidator::Constraints::MethodsFactory ':set';
 
 #use Data::Dumper;
 
@@ -15,28 +16,35 @@ sub build {
 
     my $profile = {
         filters  => ['trim'],
-        required => ['pause_id', 'name', 'email'],
-        optional => ['mirror','actions'],
+        required => ['pauseid', 'name', 'email', 'action'],
+        optional => ['mirror'],
         defaults => {
             mirror => 'http://www.cpan.org',
         },
         field_filters => {
-            email   => ['lc'],
-            actions => ['lc'],
+            email  => ['lc'],
+            action => ['lc'],
+        },
+        dependencies => {
+            action => {
+                post => ['pauseid', 'name', 'email', 'mirror']
+            }
         },
         constraint_methods => {
-            pause_id => qr/^\w+$/,
-            name     => qr/^\w+$/,
-            email    => valid_email,
-            mirror   => valid_url,
+            pauseid => qr/^\w+$/,
+            name    => qr/\w+/,
+            email   => valid_email,
+            mirror  => valid_url,
+            action  => FV_set(1, qw( post )),
         },
         msgs => {
             format => '%s',
             constraints => {
-                pause_id => 'should be alphanumeric characters',
-                name     => 'should be alphanumeric characters',,
-                email    => 'should be a valid email address',
-                mirror   => 'should be a valid url',
+                pauseid => 'should be alphanumeric characters',
+                name    => 'should be alphanumeric characters',
+                email   => 'should be a valid email address',
+                mirror  => 'should be a valid url',
+                action  => 'must be one of these: post',
             }
         }
     };

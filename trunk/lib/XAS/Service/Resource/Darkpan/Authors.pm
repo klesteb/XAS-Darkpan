@@ -28,7 +28,7 @@ sub init {
     $self->SUPER::init($args);
 
     $self->{'authors'} = $args->{'processor'};
-
+    
     my @fields = $self->authors->database->fields();
 
     $self->{'validate'} = XAS::Service::Validate::Darkpan::Authors->new();
@@ -56,7 +56,7 @@ sub malformed_request {
     if ($method eq 'GET') {
 
         $stat = 0;
-        
+
         if (my $id = bind_path('/:id', $path)) {
 
             unless ($id eq '_search') {
@@ -64,11 +64,11 @@ sub malformed_request {
                 if ($self->authors->database->find(-criteria => { id => $id })) {
 
                     $stat = 0;
-                    
+
                 }
-                
+
             }
-            
+
         }
 
     } elsif ($method eq 'DELETE') {
@@ -76,31 +76,33 @@ sub malformed_request {
         if (my $id = bind_path('/:id', $path)) {
 
             if ($self->authors->database->find(-criteria => { id => $id })) {
-                
+
                 $stat = 0;
-                
+
             }
-            
+
         }
 
     } elsif ($method eq 'POST') {
 
+        $stat = 0;
+
         if (my $id = bind_path('/:id', $path)) {
-                
+
             $stat = 1;
-                
+
         }
-            
+
     } elsif ($method eq 'PUT') {
 
         if (my $id = bind_path('/:id', $path)) {
 
             if ($self->authors->database->find(-criteria => { id => $id })) {
-                
+
                 $stat = 0;
-                
+
             }
-            
+
         }
 
     }
@@ -113,7 +115,7 @@ sub resource_exists {
     my $self = shift;
 
     # for form processing
-    
+
     my $stat   = 0;
     my $alias  = $self->alias;
     my $method = $self->request->method;
@@ -126,23 +128,27 @@ sub resource_exists {
         if (my $id = bind_path('/:id', $path)) {
 
             if ($self->authors->database->find(-criteria => { id => $id })) {
-                
+
                 $stat = 1;
-                
+
             }
-            
+
         }
+
+    } elsif ($method eq 'POST') {
+
+        $stat = 1;
 
     } elsif ($method eq 'PUT') {
 
         if (my $id = bind_path('/:id', $path)) {
 
             if ($self->authors->database->find(-criteria => { id => $id })) {
-                
+
                 $stat = 1;
-                
+
             }
-            
+
         }
 
     } elsif ($method eq 'GET') {
@@ -150,15 +156,15 @@ sub resource_exists {
         if (my $id = bind_path('/:id', $path)) {
 
             if ($self->authors->database->find(-criteria => { id => $id })) {
-                
+
                 $stat = 1;
-                
+
             }
 
         } else {
-            
+
             $stat = 1;
-            
+
         }
 
     }
@@ -179,11 +185,11 @@ sub delete_resource {
     if (my $id = bind_path('/:id', $path)) {
 
         if ($self->authors->database->remove($id)) {
-            
+
             $stat = 1;
-            
+
         }
-        
+
     }
 
     return $stat;
@@ -198,11 +204,11 @@ sub get_navigation {
     my $self = shift;
 
     return [{
-        link => '/api',
-        text => 'Root',
+       link => '/api',
+       text => 'Root',
     },{
-        link => '/api/authors',
-        text => 'Authors'
+       link => '/api/authors',
+       text => 'Authors'
     }];
 
 }
@@ -216,8 +222,8 @@ sub get_links {
             href  => '/api',
         },
         self => {
-          title => 'Authors',
-          href  => '/api/authors',
+            title => 'Authors',
+            href  => '/api/authors',
         },
     };
 
@@ -252,6 +258,7 @@ sub get_response {
             title => 'Create',
             href  => '/api/authors',
         }];
+        
     };
 
     $data->{'_links'}     = $self->get_links();
@@ -285,7 +292,7 @@ sub get_response {
     }
 
     $self->log->debug(sprintf("%s: get_response: %s", $alias, Dumper($data)));
-        
+
     return $data;
 
 }
@@ -306,63 +313,77 @@ sub process_params {
     my $id     = bind_path('/:id', $path);
 
     $self->log->debug("$alias: process_params - $path");
+    $self->log->debug(sprintf("$alias: %s", Dumper($params)));
 
-    if (my $valids = $self->validate->check($params)) {
+    try {
 
-        my $action = $valids->{'action'};
+        if (my $valids = $self->validate->check($params)) {
 
-        if ($action eq 'post') {
+            $self->log->debug(sprintf("$alias: %s", Dumper($valids)));
 
-            if (defined($valids->{'cancel'})) {
+            my $action = $valids->{'action'};
 
-                # from the html interface, if the cancel button was pressed,
-                # redirect back to /api/authors
+            if ($action eq 'post') {
 
-                $stat = \301;
-                $self->response->header('Location' => sprintf('%s', $uri->path));
+                if (defined($valids->{'cancel'})) {
+
+                    # from the html interface, if the cancel button was pressed,
+                    # redirect back to /api/authors
+
+                    $stat = \301;
+                    $self->response->header('Location' => sprintf('%s', $uri->path));
+
+                } else {
+
+                    # this will produce a 201 response code. we need
+                    # to manually create the response body.
+
+                    $stat = 1;
+                    $id   = $self->post_data($valids);
+                    $data = $self->build_20X($id);
+                    $body = $self->format_body($data);
+
+                    $self->response->body($body);
+                    $self->response->header('Location' => sprintf('%s/%s', $uri->path, $id));
+
+                }
 
             } else {
 
-                # this will produce a 201 response code. we need
-                # to manually create the response body.
+                if ($stat = $self->handle_action($id, $action, $valids)) {
 
-                $stat = 1;
-                $id   = $self->post_data($valids);
-                $data = $self->build_20X($id);
-                $body = $self->format_body($data);
+                    # this will produce a 202 response code. we need
+                    # to manually create the response body.
 
-                $self->response->body($body);
-                $self->response->header('Location' => sprintf('%s/%s', $uri->path, $id));
+                    $stat = \202;
+                    $data = $self->build_20X($id);
+                    $body = $self->format_body($data);
+
+                    $self->response->body($body);
+                    $self->response->header('Location' => sprintf('%s/%s', $uri->path, $id));
+
+                } else {
+
+                    $stat = \404;
+
+                }
 
             }
 
         } else {
 
-            if ($stat = $self->handle_action($id, $action, $valids)) {
-
-                # this will produce a 202 response code. we need
-                # to manually create the response body.
-
-                $stat = \202;
-                $data = $self->build_20X($id);
-                $body = $self->format_body($data);
-
-                $self->response->body($body);
-                $self->response->header('Location' => sprintf('%s/%s', $uri->path, $id));
-
-            } else {
-
-                $stat = \404;
-
-            }
+            $stat = \404;
 
         }
 
-    } else {
+    } catch {
 
-        $stat = \404;
+        my $ex = $_;
+        $self->log->fatal($ex);
 
-    }
+        $stat = \409;
+
+    };
 
     return $stat;
 
@@ -384,8 +405,8 @@ sub handle_action {
 }
 
 sub build_20X {
-    my $self  = shift;
-    my $id    = shift;
+    my $self = shift;
+    my $id   = shift;
 
     my $data;
 
@@ -394,8 +415,8 @@ sub build_20X {
     $data->{'_links'}     = $self->get_links();
     $data->{'navigation'} = $self->get_navigation();
 
-    if (my $author = $self->authors->find(-criteria => { id => $id })) {
-        
+    if (my $author = $self->authors->database->find(-criteria => { id => $id })) {
+
         my $info = $self->build_response($author);
         $data->{'_embedded'}->{'authors'} = $info;
 
@@ -409,24 +430,16 @@ sub post_data {
     my $self   = shift;
     my $params = shift;
 
-    my $id;
-    my $alias  = $self->alias;
-    my $schema = $self->schema;
-    my $uri    = $self->request->uri;
-    my $now    = DateTime->now(time_zone => 'UTC');
-    my $dt     = dt2db($now);
+    my $alias = $self->alias;
 
     $self->log->debug("$alias: post_data");
 
-    my $data = {
-        pauseid  => $params->{'pause_id'},
-        name     => $params->{'name'},
-        email    => $params->{'email'},
-        mirror   => $params->{'mirror'},
-        datetime => $dt,
-    };
-
-    my $results = Authors->create_record($schema, $data);
+    my $results = $self->authors->database->add(
+        -pauseid => $params->{'pauseid'},
+        -name    => $params->{'name'},
+        -email   => $params->{'email'},
+        -mirror  => $params->{'mirror'},
+    );
 
     return $results->{'id'};
 
@@ -451,7 +464,7 @@ sub build_response {
     $data->{'email'}    = $rec->email;
     $data->{'mirror'}   = $rec->mirror;
     $data->{'datetime'} = dt2db($rec->datetime);
-    
+
     return $data;
 
 }
@@ -459,10 +472,10 @@ sub build_response {
 sub create_form {
     my $self = shift;
 
-    # pause_id: the authors PAUSE name
-    # name:     name of user that submitted the command
-    # email:    command line to execute
-    # mirror:   prioritiy to run process under
+    # pauseid: the authors PAUSE name
+    # name:    full name
+    # email:   email address for pauseid
+    # mirror:  mirror the pauseid is associated with
 
     my $form = {
         name    => 'create',
@@ -470,46 +483,46 @@ sub create_form {
         enctype => 'application/x-www-form-urlencoded',
         url     => '/api/authors',
         items => [{
-                      type  => 'hidden',
-                      name  => 'action',
-                      value => 'POST',
-                  },{
-                      type => 'fieldset',
-                        legend => 'Create a new Author',
-                        fields => [{
-                                       id       => 'username',
-                                       label    => 'Username',
-                                       type     => 'textfield',
-                                       name     => 'username',
-                                       tabindex => 2,
-                                       required => 1,
-                                   },{
-                                       id       => 'name',
-                                         label    => 'name',
-                                         type     => 'textfield',
-                                         name     => 'name',
-                                         tabindex => 3,
-                                         required => 1,
-                                   },{
-                                       id       => 'email',
-                                         label    => 'email',
-                                         type     => 'textfield',
-                                         name     => 'email',
-                                         tabindex => 5,
-                                         required => 1,
-                                   },{
-                                       id       => 'mirror',
-                                         label    => 'mirror',
-                                         type     => 'textfield',
-                                         name     => 'mirror',
-                                         value    => 'http://www.cpan.org',
-                                         tabindex => 6,
-                                         required => 0,
-                                   }]
-                  },{
-                      type => 'standard_buttons',
-                        tabindex => 7,
-                  }]
+            type  => 'hidden',
+            name  => 'action',
+            value => 'POST',
+        },{
+            type => 'fieldset',
+            legend => 'Create a new Author',
+            fields => [{
+                id       => 'pauseid',
+                label    => 'Pause Id',
+                type     => 'textfield',
+                name     => 'pauseid',
+                tabindex => 1,
+                required => 1,
+            },{
+                id       => 'name',
+                label    => 'Name',
+                type     => 'textfield',
+                name     => 'name',
+                tabindex => 2,
+                required => 1,
+            },{
+                id       => 'email',
+                label    => 'Email',
+                type     => 'textfield',
+                name     => 'email',
+                tabindex => 3,
+                required => 1,
+            },{
+                id       => 'mirror',
+                label    => 'Mirror',
+                type     => 'textfield',
+                name     => 'mirror',
+                value    => 'http://www.cpan.org',
+                tabindex => 4,
+                required => 0,
+            }]
+        },{
+            type     => 'standard_buttons',
+            tabindex => 5,
+        }]
     };
 
     return $form;

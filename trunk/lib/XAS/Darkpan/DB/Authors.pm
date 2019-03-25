@@ -38,12 +38,10 @@ sub remove {
     my ($id) = validate_params(\@_, [1]);
 
     my $schema = $self->schema;
-    my $criteria = {
-        id => $id
-    };
+    my $rec->{'id'} = $id;
 
-    return Authors->delete_records($schema, $criteria);
-
+    return Authors->delete_record($schema, $rec);
+    
 }
 
 sub add {
@@ -58,7 +56,6 @@ sub add {
     my $schema = $self->schema;
     my $dt = DateTime->now(time_zone => 'local');
 
-    $p->{'downloads'} = 0;
     $p->{'datetime'} = dt2db($dt);
 
     return Authors->create_record($schema, $p);
