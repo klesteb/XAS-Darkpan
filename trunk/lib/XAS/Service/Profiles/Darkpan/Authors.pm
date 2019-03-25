@@ -17,7 +17,7 @@ sub build {
     my $profile = {
         filters  => ['trim'],
         required => ['pauseid', 'name', 'email', 'action'],
-        optional => ['mirror'],
+        optional => ['mirror', 'id'],
         defaults => {
             mirror => 'http://www.cpan.org',
         },
@@ -27,19 +27,22 @@ sub build {
         },
         dependencies => {
             action => {
-                post => ['pauseid', 'name', 'email', 'mirror']
+                post => ['pauseid', 'name', 'email', 'mirror'],
+                put  => ['pauseid', 'name', 'email', 'mirror'],
             }
         },
         constraint_methods => {
+            id      => qr/\d+/,
             pauseid => qr/^\w+$/,
             name    => qr/\w+/,
             email   => valid_email,
             mirror  => valid_url,
-            action  => FV_set(1, qw( post )),
+            action  => FV_set(1, qw( post put )),
         },
         msgs => {
             format => '%s',
             constraints => {
+                id      => 'should be numeric characters',
                 pauseid => 'should be alphanumeric characters',
                 name    => 'should be alphanumeric characters',
                 email   => 'should be a valid email address',

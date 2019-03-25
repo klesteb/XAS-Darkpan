@@ -179,16 +179,13 @@ sub delete_resource {
     my $stat  = 0;
     my $alias = $self->alias;
     my $path  = $self->request->path_info;
-
+    my $id    = bind_path('/:id', $path);
+    
     $self->log->debug("$alias: authors delete_resource - $path");
 
-    if (my $id = bind_path('/:id', $path)) {
+    if ($self->authors->database->remove($id)) {
 
-        if ($self->authors->database->remove($id)) {
-
-            $stat = 1;
-
-        }
+        $stat = 1;
 
     }
 
@@ -306,11 +303,11 @@ sub process_params {
     my $data;
     my $body;
     my $stat   = 0;
+    my $results = undef;
     my $alias  = $self->alias;
     my $uri    = $self->request->uri;
     my $method = $self->request->method;
     my $path   = $self->request->path_info;
-    my $id     = bind_path('/:id', $path);
 
     $self->log->debug("$alias: process_params - $path");
     $self->log->debug(sprintf("$alias: %s", Dumper($params)));
@@ -338,35 +335,36 @@ sub process_params {
                     # this will produce a 201 response code. we need
                     # to manually create the response body.
 
-                    $stat = 1;
-                    $id   = $self->post_data($valids);
-                    $data = $self->build_20X($id);
-                    $body = $self->format_body($data);
+                    $stat    = 1;
+                    $results = $self->post_data($valids);
+                    $data    = $self->build_20X($results);
+                    $body    = $self->format_body($data);
 
                     $self->response->body($body);
-                    $self->response->header('Location' => sprintf('%s/%s', $uri->path, $id));
+                    $self->response->header('Location' => sprintf('%s/%s', $uri->path, $results->{'id'}));
 
                 }
 
+            } elsif ($action eq 'put') {
+                
+                $valids->{'id'} = bind_path('/:id', $path);
+                
+                # this will produce a 205 response code. we need
+                # to manually create the response body.
+
+                $stat    = 1;
+                $results = $self->put_data($valids);
+                $data    = $self->build_20X($results);
+                $body    = $self->format_body($data);
+
+                $self->response->body($body);
+                $self->response->header('Location' => $uri->path);
+
+                $stat = \205;
+                
             } else {
 
-                if ($stat = $self->handle_action($id, $action, $valids)) {
-
-                    # this will produce a 202 response code. we need
-                    # to manually create the response body.
-
-                    $stat = \202;
-                    $data = $self->build_20X($id);
-                    $body = $self->format_body($data);
-
-                    $self->response->body($body);
-                    $self->response->header('Location' => sprintf('%s/%s', $uri->path, $id));
-
-                } else {
-
-                    $stat = \404;
-
-                }
+                $stat = \404;
 
             }
 
@@ -389,37 +387,26 @@ sub process_params {
 
 }
 
-sub handle_action {
-    my $self   = shift;
-    my $id     = shift;
-    my $action = shift;
-    my $params = shift;
-
-    my $stat = 1;
-    my $alias = $self->alias;
-
-    $self->log->debug(sprintf("%s: handle_action: %s", $alias, $action));
-
-    return $stat;
-
-}
-
 sub build_20X {
-    my $self = shift;
-    my $id   = shift;
+    my $self    = shift;
+    my $status  = shift;
+    my $results = shift;
 
     my $data;
-
+    my $criteria = {
+        id => $results->{'id'}
+    };
+    
     # build a 20X reponse body
 
     $data->{'_links'}     = $self->get_links();
     $data->{'navigation'} = $self->get_navigation();
 
-    if (my $author = $self->authors->database->find(-criteria => { id => $id })) {
-
-        my $info = $self->build_response($author);
+    if (my $rec = $self->authors->database->find(-criteria => $criteria)) {
+        
+        my $info = $self->build_response($rec);
         $data->{'_embedded'}->{'authors'} = $info;
-
+        
     }
 
     return $data;
@@ -441,7 +428,27 @@ sub post_data {
         -mirror  => $params->{'mirror'},
     );
 
-    return $results->{'id'};
+    return $results;
+
+}
+
+sub put_data {
+    my $self   = shift;
+    my $params = shift;
+
+    my $alias = $self->alias;
+
+    $self->log->debug("$alias: put_data");
+
+    my $results = $self->authors->database->update(
+        -id      => $params->{'id'},
+        -pauseid => $params->{'pauseid'},
+        -name    => $params->{'name'},
+        -email   => $params->{'email'},
+        -mirror  => $params->{'mirror'},
+    );
+
+    return $results;
 
 }
 
@@ -458,7 +465,7 @@ sub build_response {
         }
     };
 
-    $data->{'id'}       = $id;
+    $data->{'id'}       = $rec->id;
     $data->{'pauseid'}  = $rec->pauseid;
     $data->{'name'}     = $rec->name;
     $data->{'email'}    = $rec->email;
