@@ -63,7 +63,13 @@ __PACKAGE__->has_one(
 __PACKAGE__->has_many( 
     packages => 'XAS::Model::Database::Darkpan::Result::Packages', 
     { 'foreign.pauseid' => 'self.pauseid' },
-    { 'cascade_delete' => 0 },
+    { 'cascade_delete' => 1 },
+);
+
+__PACKAGE__->has_many( 
+    permissions => 'XAS::Model::Database::Darkpan::Result::Permissions', 
+    { 'foreign.pauseid' => 'self.pauseid' },
+    { 'cascade_delete' => 1 },
 );
 
 sub sqlt_deploy_hook {

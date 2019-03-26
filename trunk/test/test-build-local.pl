@@ -51,7 +51,7 @@ my $rec = $process->packages->inject(
 
 $process->packages->process(
     -pause_id    => 'KESTEB',
-    -package_id  => $rec->id,
+    -package_id  => $rec->{'id'},
     -destination => Dir($root, 'authors', 'id'),
     -url         => URL('file:///home/kevin/dev/released/DDC/DDC-0.01.tar.gz'),
 );

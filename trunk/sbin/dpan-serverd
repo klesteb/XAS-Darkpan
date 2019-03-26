@@ -35,8 +35,6 @@
 # ============================================================================
 #
 
-use lib '/home/kevin/dev/XAS/trunk/lib';
-use lib '/home/kevin/dev/XAS-Model/trunk/lib';
 use lib '/home/kevin/dev/XAS-Service/trunk/lib';
 use lib '/home/kevin/dev/XAS-Darkpan/trunk/lib';
 

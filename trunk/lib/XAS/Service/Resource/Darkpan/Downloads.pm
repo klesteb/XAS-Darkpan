@@ -121,7 +121,7 @@ sub finish_request {
     $self->log->debug("$alias: finish_request");
 
     $self->log->info(
-        sprintf('%s: "%s" requested a %s for %s with a status of %s',
+        sprintf('%s: %s requested a %s for %s with a status of %s',
             $alias, $user, $method, $path, $code)
     );
 
@@ -248,22 +248,22 @@ XAS::Service::Resource::Darkpan::Downloads - Perl extension for the XAS environm
 
 =head1 SYNOPSIS
 
-    my $builder = Plack::Builder->new();
-    my $schema  = XAS::Model::Database->opendb('darkpan;);
-    my $mirror = Badger::URL->new('http://localhost:8080');
+ my $builder = Plack::Builder->new();
+ my $schema  = XAS::Model::Database->opendb('darkpan;);
+ my $mirror = Badger::URL->new('http://localhost:8080');
 
-    $builder->mount('/authors/id' => Web::Machine->new(
-        resource => 'XAS::Service::Resource::Darkpan::Downloads',
-        resource_args => [
-            alias    => 'downloader',
-            root     => Dir($path),
-            mirror   => $mirror->copy(),
-            database => XAS::Darkpan::DB::Packages->new(
-                -schema => $schema,
-                -url    => $mirror->copy(),
-            )
-        ] )->to_app
-    );
+ $builder->mount('/authors/id' => Web::Machine->new(
+     resource => 'XAS::Service::Resource::Darkpan::Downloads',
+     resource_args => [
+         alias    => 'downloader',
+         root     => Dir($path),
+         mirror   => $mirror->copy(),
+         database => XAS::Darkpan::DB::Packages->new(
+             -schema => $schema,
+             -url    => $mirror->copy(),
+         )
+     ] )->to_app
+ );
 
 =head1 DESCRIPTION
 

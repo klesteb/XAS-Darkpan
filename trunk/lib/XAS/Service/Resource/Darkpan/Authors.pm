@@ -51,7 +51,7 @@ sub malformed_request {
     my $method = $self->request->method;
     my $path   = $self->request->path_info;
 
-    $self->log->debug("$alias:  malformed_request - $path");
+    $self->log->debug(sprintf("%s: malformed_request: %s - %s\n", $alias, $path, $method));
 
     if ($method eq 'GET') {
 
@@ -181,7 +181,7 @@ sub delete_resource {
     my $path  = $self->request->path_info;
     my $id    = bind_path('/:id', $path);
     
-    $self->log->debug("$alias: authors delete_resource - $path");
+    $self->log->debug("$alias: delete_resource - $path");
 
     if ($self->authors->database->remove($id)) {
 
@@ -571,39 +571,48 @@ XAS::Service::Resource::Darkpan::Authors - Perl extension for the XAS environmen
 
 =head1 SYNOPSIS
 
-    my $builder = Plack::Builder->new();
+ my $builder = Plack::Builder->new();
 
-    $builder->mount('/api/authors' => Web::Machine->new(
-        resource => 'XAS::Service::Resource::Darkpan::Authors',
-        resource_args => [
-            alias           => 'authors',
-            json            => $json,
-            template        => $template,
-            schema          => $schema,
-            app_name        => $name,
-            app_description => $description
-        ] )->to_app
-    );
+ $builder->mount('/api/authors' => Web::Machine->new(
+     resource => 'XAS::Service::Resource::Darkpan::Authors',
+     resource_args => [
+         alias           => 'authors',
+         template        => $template,
+         json            => $json,
+         app_name        => $name,
+         app_description => $description,
+         authenticator   => $authen,
+         processor => XAS::Darkpan::Process::Authors->new(
+             -schema  => $schema,
+             -lockmgr => $lockmgr,
+             -path    => Dir($dpath, 'authors', 'id'),
+             -mirror  => $mirror->copy()
+        )
+     ])
+ );
 
 =head1 DESCRIPTION
 
 This module inherits from L<XAS::Service::Resource|XAS::Service::Resource>. It
-provides a link to "/rexec/jobs" and the services it provides.
+provides a link to "/api/authors" and the services it provides.
 
-A job defines a task to be executed on the local system. These jobs are first
-inserted into a database and the job controller starts them. The jobs can be
-started, stopped, paused, resumed or deleted from the database. If any
-output occurs from the job. It is recorded into a log file. This log file is
-removed when the job is deleted.
+=head1 METHODS - Web::Machine::Resource
 
-=head1 METHODS - Web::Machine
-
-Web::Machine provides callbacks for processing the request. These have been
-overridden.
+Web::Machine::Resource provides callbacks for processing the request. These 
+have been overridden.
 
 =head2 init
 
-This method interfaces the passed resource_args to accessors.
+This method interfaces the passed resource_args to accessors. The following
+are additional arguments.
+
+=over 4
+
+=item B<processor>
+
+The processor used to manage the authors table.
+
+=back
 
 =head2 allowed_methods
 
@@ -620,34 +629,15 @@ This method checks the request url for proper format.
 
 =head2 resource_exists
 
-This method checks to see if the job exists within the database.
+This method checks to see if the record exists within the database.
 
 =head2 delete_resource
 
-This method will delete the job from the database and the associated log file.
+This method will delete the record from the database.
 
 =head1 METHODS - Ours
 
 These methods are used to make writting services easier.
-
-=head2 from_json
-
-This method will take action depending on the posted data. It will take the
-posted data and normalize it. The action may be to queue the job into the
-database or to start, stop, pause or resume a current job.
-
-=head2 from_html
-
-This method will take action depending on the posted data. This may be to
-queue the job into the database or to start, stop, pause or resume a current
-job.
-
-=head2 handle_action
-
-This method is for starting, stopping, pausing or resuming a job. This is done
-by passing a message to the job controller. The controller updates the database
-as to the current status of the job. This method will call build_20X() to
-format the correct response to the action.
 
 =head2 build_20X
 
@@ -658,28 +648,30 @@ of the actions will not create the correct data structure when performed.
 
 This method will write the posted parameters into the internal database.
 
-=head2 build_job
+=head2 put_data
 
-This method creates the data structure for a job. This will later be translated
-into html or json.
+This method will update the record  in the internal database.
 
 =head2 create_form
 
-This method creates the data structure needed for a form. This form can be
-used for data input of a job.
+This method creates the data structure needed for a form.
 
 =head1 ACCESSORS
 
 These accessors are used to interface the arguments passed into the Service
 Machine Resource.
 
-=head2 schema
+=head2 search
 
-Returns the handle to the database.
+This returns the handle for searches.
 
-=head2 controller
+=head2 validate
 
-Returns the name of the job controller
+This returns the handle for data validation.
+
+=head2 authors
+
+This returns the handle to access the authors functionality.
 
 =head1 SEE ALSO
 
@@ -697,7 +689,7 @@ Kevin L. Esteb, E<lt>kevin@kesteb.usE<gt>
 
 =head1 COPYRIGHT AND LICENSE
 
-Copyright (c) 2012-2016 Kevin L. Esteb
+Copyright (c) 2012-2019 Kevin L. Esteb
 
 This is free software; you can redistribute it and/or modify it under
 the terms of the Artistic License 2.0. For details, see the full text

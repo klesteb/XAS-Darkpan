@@ -63,7 +63,7 @@ sub create {
     my $date     = $dt->strftime('%a %b %d %H:%M:%S %Y %Z');
     my $packages = $self->database->data(-criteria => $criteria);
     my $file     = File($self->path, '02packages.details.txt.gz');
-    my $count    = scalar(@$packages) + 9;
+    my $count    = scalar(@$packages);
     
     $self->log->debug('entering create()');
 
@@ -1290,7 +1290,7 @@ sub init {
 
     my $self = $class->SUPER::init(@_);
 
-    $self->mirror->path('/modules/02packages.details.txt.gz');
+    $self->mirror->path('/authors/02packages.details.txt.gz');
 
     $self->{'database'} = XAS::Darkpan::DB::Packages->new(
         -schema => $self->schema,

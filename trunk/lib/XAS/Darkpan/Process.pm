@@ -230,7 +230,7 @@ sub init {
     $self->{'authors'} = XAS::Darkpan::Process::Authors->new(
         -schema  => $self->schema,
         -lockmgr => $self->lockmgr,
-        -path    => Dir($root, 'authors', 'id'),
+        -path    => Dir($root, 'authors'),
         -mirror  => $self->mirror->copy()
     );
 
@@ -251,7 +251,7 @@ sub init {
     $self->{'packages'} = XAS::Darkpan::Process::Packages->new(
         -schema  => $self->schema,
         -lockmgr => $self->lockmgr,
-        -path    => Dir($root, 'authors', 'id'),
+        -path    => Dir($root, 'modules'),
         -mirror  => $self->mirror->copy()
     );
 

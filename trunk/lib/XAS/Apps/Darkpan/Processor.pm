@@ -22,8 +22,8 @@ use XAS::Class
   filesystem => 'File Dir',
   accessors  => 'cfg',
   vars => {
-      SERVICE_NAME         => 'XAS_DARKPAND',
-      SERVICE_DISPLAY_NAME => 'XAS Darkpan',
+      SERVICE_NAME         => 'DPAN_SERVERD',
+      SERVICE_DISPLAY_NAME => 'DPAN Server',
       SERVICE_DESCRIPTION  => 'A local CPAN implementation'
   }
 ;
@@ -63,7 +63,7 @@ sub build_routes {
     );
 
     $$urlmap->mount('/authors' => Plack::App::File->new(
-        root => Dir($dpath, '/authtors')->path )
+        root => Dir($dpath, '/authors')->path )
     );
 
     $$urlmap->mount('/modules' => Plack::App::File->new(
@@ -111,8 +111,6 @@ sub build_app {
     my @paths;
     my $def_root = Dir($self->env->lib, 'darkpan');
 
-    $self->log->info(sprintf("def_root: %s", $def_root));
-    
     my $path = Dir($self->env->lib, 'web', 'root');
     my $root = Dir($self->cfg->val('app', 'root', $path->path));
     my $base = Dir($self->cfg->val('app', 'base', $path->path));
@@ -201,7 +199,7 @@ __END__
 
 =head1 NAME
 
-XAS::Apps::Darkpan::Processor - This module provides micro CPAN
+XAS::Apps::Darkpan::Processor - This module provides a micro CPAN
 
 =head1 SYNOPSIS
 
@@ -221,11 +219,11 @@ The configuration file follows the familiar Windows .ini format. It contains
 following stanzas.
 
  [system]
- port = 9507
+ port = 8080
  address = 127.0.0.1
 
 This stanza defines the network interface. By default the process listens on
-port 9507 on the 127.0.0.1 network.
+port 8080 on the 127.0.0.1 network.
 
  [app]
  base = /var/lib/xas/web

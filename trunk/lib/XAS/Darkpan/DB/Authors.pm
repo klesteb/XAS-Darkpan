@@ -4,15 +4,16 @@ our $VERSION = '0.01';
 
 use XAS::Model::Database
   schema => 'XAS::Model::Database::Darkpan',
-  table  => 'Authors'
+  table  => 'Authors Packages Permissions'
 ;
 
 use DateTime;
+use Try::Tiny;
 use Badger::URL;
-use Badger::Filesystem 'File';
-use Params::Validate 'HASHREF';
 use XAS::Darkpan::Lib::Author;
+use Params::Validate 'HASHREF';
 use XAS::Darkpan::Parse::Authors;
+use Badger::Filesystem 'Dir File';
 
 use XAS::Class
   debug     => 0,
@@ -37,10 +38,65 @@ sub remove {
     my $self = shift;
     my ($id) = validate_params(\@_, [1]);
 
-    my $schema = $self->schema;
+    $self->log->debug("authors: entering remove");
+    
+    my $result = undef;
     my $rec->{'id'} = $id;
+    my $schema = $self->schema;
 
-    return Authors->delete_record($schema, $rec);
+    my $criteria = {
+        id => $id
+    };
+    
+    try {
+        
+        if (my $author = Authors->find($schema, $criteria)) {
+        
+            if (my $packages = $author->search_related('packages')) {
+                
+                while (my $package = $packages->next) {
+                                        
+                    my $path      = Dir($package->pathname)->directory;
+                    my $ext       = $package->extension;
+                    my $version   = $package->version;
+                    my $dist      = $package->dist;
+                    my $distvname = sprintf("%s-%s", $dist, $version);
+                        
+                    my $file   = File($path, $distvname . ".$ext");
+                    my $readme = File($path, $distvname . '.readme');
+                    
+                    if ($file->exists) {
+                        
+                        $file->delete;
+                        $self->log->info(sprintf("removing %s", $file));
+                        
+                    }
+                        
+                    if ($readme->exists) {
+                        
+                        $readme->delete;
+                        $self->log->info(sprintf("removing %s", $readme));
+                        
+                    }
+                    
+                }
+                
+            }
+
+            $result = Authors->delete_record($schema, $rec);
+
+        }
+        
+    } catch {
+            
+        my $ex = $_;
+        $self->log->fatal($ex);
+            
+    };
+    
+    $self->log->debug("authors: leaving remove");
+
+    return $result;
     
 }
 

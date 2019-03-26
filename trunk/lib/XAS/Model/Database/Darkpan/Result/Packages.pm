@@ -87,11 +87,13 @@ __PACKAGE__->optimistic_locking_version_column('revision');
 __PACKAGE__->has_many( 
     provides => 'XAS::Model::Database::Darkpan::Result::Provides', 
     { 'foreign.package_id' => 'self.id' },
+    { 'cascade_delete' => 1 },
 );
 
 __PACKAGE__->has_many( 
     requires => 'XAS::Model::Database::Darkpan::Result::Requires', 
     { 'foreign.package_id' => 'self.id' },
+    { 'cascade_delete' => 1 },
 );
 
 __PACKAGE__->has_one( 
