@@ -178,8 +178,8 @@ sub process {
             $self->log->info(sprintf('copied: %s, to %s', $url, $file));
 
             $self->_load_archive($file, $package_id);
-            $self->_checksum($file->directory);
             $self->_create_readme($file);
+            $self->_checksum($file->directory);
 
         }
 
@@ -306,7 +306,6 @@ sub _load_archive {
 
     }
 
-#warn Dumper($hash);
     $self->schema->txn_do(sub {
 
         if (defined($hash->{'provides'})) {

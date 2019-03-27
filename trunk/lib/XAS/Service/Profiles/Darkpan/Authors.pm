@@ -22,8 +22,9 @@ sub build {
             mirror => 'http://www.cpan.org',
         },
         field_filters => {
-            email  => ['lc'],
-            action => ['lc'],
+            email   => ['lc'],
+            action  => ['lc'],
+            pauseid => ['uc']
         },
         dependencies => {
             action => {

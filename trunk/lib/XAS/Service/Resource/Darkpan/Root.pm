@@ -33,6 +33,9 @@ sub get_navigation {
     },{
         link => '/api/permissions',
         text => 'Permissions'
+    },{
+        link => '/api/create',
+        text => 'Create'
     }];
 
 }
@@ -57,6 +60,9 @@ sub get_links {
         },{
             title => 'Permissions',
             href  => '/api/permissions',
+        },{
+            title => 'Create',
+            href  => '/api/create',
         }],
     };
 

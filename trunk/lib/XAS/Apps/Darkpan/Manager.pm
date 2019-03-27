@@ -11,6 +11,7 @@ use XAS::Lib::Lockmgr;
 use XAS::Model::Schema;
 use Plack::App::URLMap;
 use XAS::Service::Server;
+use XAS::Darkpan::Process;
 use XAS::Darkpan::DB::Packages;
 use XAS::Darkpan::Process::Authors;
 
@@ -62,6 +63,23 @@ sub build_routes {
                 -schema  => $schema,
                 -lockmgr => $lockmgr,
                 -path    => Dir($dpath, 'authors', 'id'),
+                -mirror  => $mirror->copy()
+            )
+        ])
+    );
+
+    $$urlmap->mount('/api/create' => Web::Machine->new(
+        resource => 'XAS::Service::Resource::Darkpan::Create',
+        resource_args => [
+            alias           => 'creator',
+            template        => $template,
+            json            => $json,
+            app_name        => $name,
+            app_description => $description,
+            authenticator   => $authen,
+            processor => XAS::Darkpan::Process->new(
+                -schema  => $schema,
+                -root    => Dir($dpath),
                 -mirror  => $mirror->copy()
             )
         ])

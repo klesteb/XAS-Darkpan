@@ -62,8 +62,9 @@ sub remove {
                     my $dist      = $package->dist;
                     my $distvname = sprintf("%s-%s", $dist, $version);
                         
-                    my $file   = File($path, $distvname . ".$ext");
-                    my $readme = File($path, $distvname . '.readme');
+                    my $checksum = File($path, 'CHECKSUM');
+                    my $file     = File($path, $distvname . ".$ext");
+                    my $readme   = File($path, $distvname . '.readme');
                     
                     if ($file->exists) {
                         
@@ -79,6 +80,13 @@ sub remove {
                         
                     }
                     
+                    if ($checksum->exists) {
+                        
+                        $checksum->delete;
+                        $self->log->info(sprintf("removing %s", $checksum));
+                        
+                    }
+
                 }
                 
             }
