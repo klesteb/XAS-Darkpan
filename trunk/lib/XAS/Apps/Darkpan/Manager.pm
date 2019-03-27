@@ -59,7 +59,7 @@ sub build_routes {
             app_name        => $name,
             app_description => $description,
             authenticator   => $authen,
-            processor       => XAS::Darkpan::Process::Authors->new(
+            processor => XAS::Darkpan::Process::Authors->new(
                 -schema  => $schema,
                 -lockmgr => $lockmgr,
                 -path    => Dir($dpath, 'authors', 'id'),
@@ -80,6 +80,24 @@ sub build_routes {
             processor => XAS::Darkpan::Process->new(
                 -schema  => $schema,
                 -root    => Dir($dpath),
+                -mirror  => $mirror->copy()
+            )
+        ])
+    );
+
+    $$urlmap->mount('/api/mirrors' => Web::Machine->new(
+        resource => 'XAS::Service::Resource::Darkpan::Mirrors',
+        resource_args => [
+            alias           => 'mirrors',
+            template        => $template,
+            json            => $json,
+            app_name        => $name,
+            app_description => $description,
+            authenticator   => $authen,
+            processor => XAS::Darkpan::Process::Mirrors->new(
+                -schema  => $schema,
+                -lockmgr => $lockmgr,
+                -path    => Dir($dpath, 'modules'),
                 -mirror  => $mirror->copy()
             )
         ])

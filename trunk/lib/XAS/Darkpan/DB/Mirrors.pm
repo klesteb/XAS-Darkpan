@@ -34,14 +34,14 @@ use Data::Dumper;
 
 sub remove {
     my $self = shift;
-    my ($mirror) = validate_params(\@_, [1]);
+    my ($id) = validate_params(\@_, [1]);
 
     my $schema = $self->schema;
     my $criteria = {
-        mirror => $mirror
+        id => $id
     };
 
-    Mirrors->delete_records($schema, $criteria);
+    return Mirrors->delete_records($schema, $criteria);
 
 }
 
@@ -61,10 +61,8 @@ sub add {
         datetime => dt2db($dt),
     };
 
-    $results = Mirrors->create_record($schema, $rec);
+    return Mirrors->create_record($schema, $rec);
 
-    return $results;
-    
 }
 
 sub update {
@@ -84,7 +82,7 @@ sub update {
     $data->{'type'}     = $p->{'type'}   if (defined($p->{'type'}));
     $data->{'datetime'} = dt2db($dt);
 
-    return  Mirrors->update_record($schema, $data);
+    return Mirrors->update_record($schema, $data);
     
 }
 
