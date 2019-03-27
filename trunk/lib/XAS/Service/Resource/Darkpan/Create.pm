@@ -6,7 +6,6 @@ use warnings;
 our $VERSION = '0.01';
 
 use POE;
-use DateTime;
 use Try::Tiny;
 use Data::Dumper;
 use XAS::Darkpan::Process;
@@ -439,14 +438,14 @@ __END__
 
 =head1 NAME
 
-XAS::Service::Resource::Darkpan::Authors - Perl extension for the XAS environment
+XAS::Service::Resource::Darkpan::Create - Perl extension for the XAS environment
 
 =head1 SYNOPSIS
 
  my $builder = Plack::Builder->new();
 
- $builder->mount('/api/authors' => Web::Machine->new(
-     resource => 'XAS::Service::Resource::Darkpan::Authors',
+ $builder->mount('/api/create' => Web::Machine->new(
+     resource => 'XAS::Service::Resource::Darkpan::Create',
      resource_args => [
          alias           => 'authors',
          template        => $template,
@@ -454,10 +453,9 @@ XAS::Service::Resource::Darkpan::Authors - Perl extension for the XAS environmen
          app_name        => $name,
          app_description => $description,
          authenticator   => $authen,
-         processor => XAS::Darkpan::Process::Authors->new(
+         processor => XAS::Darkpan::Process->new(
              -schema  => $schema,
-             -lockmgr => $lockmgr,
-             -path    => Dir($dpath, 'authors', 'id'),
+             -path    => Dir($dpath),
              -mirror  => $mirror->copy()
         )
      ])
@@ -466,7 +464,7 @@ XAS::Service::Resource::Darkpan::Authors - Perl extension for the XAS environmen
 =head1 DESCRIPTION
 
 This module inherits from L<XAS::Service::Resource|XAS::Service::Resource>. It
-provides a link to "/api/authors" and the services it provides.
+provides a link to "/api/create" and the services it provides.
 
 =head1 METHODS - Web::Machine::Resource
 
@@ -489,7 +487,7 @@ The processor used to manage the authors table.
 =head2 allowed_methods
 
 This returns the allowed methods for the handler. The defaults are
-OPTIONS GET POST DELETE HEAD.
+OPTIONS GET POST.
 
 =head2 create_path
 
@@ -501,28 +499,19 @@ This method checks the request url for proper format.
 
 =head2 resource_exists
 
-This method checks to see if the record exists within the database.
+This method checks the request url for proper format.
 
-=head2 delete_resource
+=head2 content_types_accepted
 
-This method will delete the record from the database.
+This method overrides the base method and allows any content type.
 
 =head1 METHODS - Ours
 
 These methods are used to make writting services easier.
 
-=head2 build_20X
+=head2 from_any
 
-This method will build the data structure needed for a 20X response. Some
-of the actions will not create the correct data structure when performed.
-
-=head2 post_data
-
-This method will write the posted parameters into the internal database.
-
-=head2 put_data
-
-This method will update the record  in the internal database.
+This method will process any content type..
 
 =head2 create_form
 
@@ -533,17 +522,9 @@ This method creates the data structure needed for a form.
 These accessors are used to interface the arguments passed into the Service
 Machine Resource.
 
-=head2 search
+=head2 processor
 
-This returns the handle for searches.
-
-=head2 validate
-
-This returns the handle for data validation.
-
-=head2 authors
-
-This returns the handle to access the authors functionality.
+This returns the handle to access the processor.
 
 =head1 SEE ALSO
 
