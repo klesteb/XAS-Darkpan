@@ -36,12 +36,10 @@ sub remove {
     my $self = shift;
     my ($id) = validate_params(\@_, [1]);
 
+    my $rec->{'id'} = $id;
     my $schema = $self->schema;
-    my $criteria = {
-        id => $id
-    };
 
-    return Mirrors->delete_records($schema, $criteria);
+    return Mirrors->delete_records($schema, $rec);
 
 }
 

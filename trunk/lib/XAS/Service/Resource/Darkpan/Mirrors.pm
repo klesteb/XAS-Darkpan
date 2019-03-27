@@ -491,38 +491,26 @@ sub create_form {
             type => 'fieldset',
             legend => 'Create a new Author',
             fields => [{
-                id       => 'pauseid',
-                label    => 'Pause Id',
-                type     => 'textfield',
-                name     => 'pauseid',
-                tabindex => 1,
-                required => 1,
-            },{
-                id       => 'name',
-                label    => 'Name',
-                type     => 'textfield',
-                name     => 'name',
-                tabindex => 2,
-                required => 1,
-            },{
-                id       => 'email',
-                label    => 'Email',
-                type     => 'textfield',
-                name     => 'email',
-                tabindex => 3,
-                required => 1,
-            },{
                 id       => 'mirror',
                 label    => 'Mirror',
                 type     => 'textfield',
                 name     => 'mirror',
                 value    => 'http://www.cpan.org',
-                tabindex => 4,
-                required => 0,
+                tabindex => 1,
+                required => 1,
+            },{
+                id       => 'type',
+                label    => 'Type',
+                type     => 'select',
+                name     => 'mirror',
+                options  => ['master', 'mirror'],
+                value    => 'master',
+                tabindex => 2,
+                required => 1,
             }]
         },{
             type     => 'standard_buttons',
-            tabindex => 5,
+            tabindex => 3,
         }]
     };
 
