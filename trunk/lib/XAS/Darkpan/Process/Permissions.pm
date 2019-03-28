@@ -5,8 +5,9 @@ our $VERSION = '0.01';
 use IO::Zlib;
 use XAS::Darkpan;
 use Badger::URL 'URL';
-use XAS::Darkpan::DB::Permissions;
 use Badger::Filesystem 'Dir File';
+use XAS::Darkpan::DB::Permissions;
+use XAS::Darkpan::Parse::Permissions;
 
 use XAS::Class
   debug   => 0,
@@ -93,6 +94,31 @@ __HEADER
 
 }
 
+sub load {
+    my $self = shift;
+
+    my @datum;
+    my $dt = DateTime->now(time_zone => 'local');
+    my $perms = XAS::Darkpan::Parse::Permissions->new(
+        -cache_path   => $self->cache_path,
+        -cache_expiry => $self->cache_expiry,
+        -url          => URL('http://www.cpan.org/modules/06perms.txt.gz'),
+    );
+
+    $perms->load();
+    $perms->parse(sub {
+        my $data = shift;
+        $data->{'datetime'} = dt2db($dt);
+        return unless (defined($data->{'pauseid'}));
+        push(@datum, $data);
+    });
+
+    $self->database->populate(\@datum);
+
+    @datum = ();
+
+}
+
 sub inject {
     my $self = shift;
     my $p = validate_params(\@_, {
@@ -120,6 +146,14 @@ sub inject {
 
 }
 
+sub remove {
+    my $self = shift;
+    my ($id) = validate_params(\@_, [1]);
+    
+    $self->database->remove($id);
+    
+}
+
 # ----------------------------------------------------------------------
 # Private Methods
 # ----------------------------------------------------------------------
@@ -133,7 +167,6 @@ sub init {
 
     $self->{'database'} = XAS::Darkpan::DB::Permissions->new(
         -schema => $self->schema,
-        -url    => $self->mirror,
     );
 
     $self->lockmgr->add(-key => $self->path);

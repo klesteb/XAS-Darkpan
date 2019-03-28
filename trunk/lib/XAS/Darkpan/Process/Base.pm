@@ -23,10 +23,10 @@ use XAS::Class
 # Public Methods
 # ----------------------------------------------------------------------
 
-sub load {
-  my $self = shift;
-
-    $self->database->load(@_);
+sub add {
+    my $self = shift;
+    
+    return $self->database->add(@_);
 
 }
 
@@ -37,12 +37,11 @@ sub clear {
 
 }
 
-sub reload {
+sub count {
     my $self = shift;
-
-    $self->database->clear(@_);
-    $self->database->load(@_);
-
+    
+    return $self->database->count(@_);
+    
 }
 
 sub data {
@@ -52,11 +51,47 @@ sub data {
 
 }
 
+sub find {
+    my $self = shift;
+    
+    return $self->database->find(@_);
+    
+}
+
+sub populate {
+    my $self = shift;
+    
+    return $self->database->populate(@_);
+    
+}
+
+sub reload {
+    my $self = shift;
+
+    $self->database->clear(@_);
+    $self->load(@_);
+
+}
+
+sub remove {
+    my $self = shift;
+    
+    $self->database->remove(@_);
+    
+}
+
 sub search {
     my $self = shift;
 
     return $self->database->search(@_);
 
+}
+
+sub update {
+    my $self = shift;
+    
+    return $self->database->update(@_);
+    
 }
 
 # ----------------------------------------------------------------------

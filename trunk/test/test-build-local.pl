@@ -23,7 +23,7 @@ my $process = XAS::Darkpan::Process->new(
 
 #$process->log->level('debug', 1);
 
-$process->create_authors();
+$process->create_directories();
 
 $process->mirrors->inject(
     -url  => URL('http://www.cpan.org'),

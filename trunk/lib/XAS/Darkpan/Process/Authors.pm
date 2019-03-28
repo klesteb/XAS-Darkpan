@@ -3,8 +3,9 @@ package XAS::Darkpan::Process::Authors;
 our $VERSION = '0.01';
 
 use IO::Zlib;
-use Badger::URL;
+use Badger::URL 'URL';
 use XAS::Darkpan::DB::Authors;
+use XAS::Darkpan::Parse::Authors;
 use Badger::Filesystem 'Dir File';
 
 use XAS::Class
@@ -70,6 +71,31 @@ sub create {
 
 }
 
+sub load {
+    my $self = shift;
+
+    my @datum;
+    my $dt = DateTime->now(time_zone => 'local');
+    my $authors = XAS::Darkpan::Parse::Authors->new(
+        -cache_path   => $self->cache_path,
+        -cache_expiry => $self->cache_expiry,
+        -url          => URL('http://www.cpan.org/authors/01mailrc.txt.gz'),
+    );
+
+    $authors->load();
+    $authors->parse(sub {
+        my $data = shift;
+        $data->{'datetime'} = dt2db($dt);
+        return unless (defined($data->{'pauseid'}));
+        push(@datum, $data);
+    });
+
+    $self->database->populate(\@datum);
+
+    @datum = ();
+
+}
+
 sub inject {
     my $self = shift;
     my $p = validate_params(\@_, {
@@ -78,8 +104,6 @@ sub inject {
        -email    => 1,
        -mirror   => { optional => 1, isa => 'Badger::URL', default => $self->mirror }
     });
-
-    $self->log->debug('entering inject()');
 
     my $name    = $p->{'name'};
     my $email   = $p->{'email'};
@@ -93,8 +117,14 @@ sub inject {
         -mirror  => $mirror,
     );
 
-    $self->log->debug('leaving inject()');
+}
 
+sub remove {
+    my $self = shift;
+    my ($id) = validate_params(\@_, [1]);
+    
+    return $self->database->remove($id);
+    
 }
 
 # ----------------------------------------------------------------------
@@ -110,7 +140,6 @@ sub init {
 
     $self->{'database'} = XAS::Darkpan::DB::Authors->new(
         -schema => $self->schema,
-        -url    => $self->mirror,
     );
 
     $self->lockmgr->add(-key => $self->path);

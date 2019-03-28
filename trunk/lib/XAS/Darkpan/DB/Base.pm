@@ -8,9 +8,7 @@ use XAS::Class
   base    => 'XAS::Base',
   vars => {
     PARAMS => {
-      -schema       => { optional => 1, default => undef },
-      -cache_path   => { optional => 1, default => '.cache' },
-      -cache_expiry => { optional => 1, default => '3 minutes' },
+      -schema => 1,
     }
   }
 ;

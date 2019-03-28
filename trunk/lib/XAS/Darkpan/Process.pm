@@ -5,7 +5,6 @@ our $VERSION = '0.01';
 use Badger::URL 'URL';
 use Badger::Filesystem 'Dir';
 
-use XAS::Lib::Lockmgr;
 use XAS::Darkpan::Process::Authors;
 use XAS::Darkpan::Process::Mirrors;
 use XAS::Darkpan::Process::Modlist;
@@ -16,13 +15,14 @@ use XAS::Class
   debug     => 0,
   version   => $VERSION,
   base      => 'XAS::Base',
-  accessors => 'packages authors mirrors lockmgr permissions modlist',
+  accessors => 'packages authors mirrors permissions modlist',
   utils     => 'dotid',
   vars => {
     PARAMS => {
-      -schema => 1,
-      -root   => { optional => 1, isa => 'Badger::Filesystem::Directory', default => Dir('/var/lib/xas/darkpan') },
-      -mirror => { optional => 1, isa => 'Badger::URL', default => URL('http://www.cpan.org') },
+      -schema  => 1,
+      -lockmgr => 1,
+      -root    => { optional => 1, isa => 'Badger::Filesystem::Directory', default => Dir('/var/lib/xas/darkpan') },
+      -mirror  => { optional => 1, isa => 'Badger::URL', default => URL('http://www.cpan.org') },
     }
   }
 ;
@@ -33,10 +33,10 @@ use XAS::Class
 # Public Methods
 # ----------------------------------------------------------------------
 
-sub create_authors {
+sub create_directories {
     my $self = shift;
 
-    $self->log->debug('entering create_authors()');
+    $self->log->debug('entering create_directories()');
 
     my $root       = $self->root;
     my $authors    = Dir($root, 'authors');
@@ -85,7 +85,7 @@ sub create_authors {
 
     }
 
-    $self->log->debug('leaving create_authors()');
+    $self->log->debug('leaving create_directories()');
 
 }
 
@@ -104,7 +104,7 @@ sub sync {
         order_by => 'package',
     };
 
-    $self->log->debug('entering mirror()');
+    $self->log->debug('entering sync()');
 
     if (my $rs = $self->packages->search(-criteria => $criteria, -options => $options)) {
 
@@ -124,7 +124,7 @@ sub sync {
 
     }
 
-    $self->log->debug('leaving mirror()');
+    $self->log->debug('leaving sync()');
 
 }
 
@@ -224,8 +224,6 @@ sub init {
 
     my $self = $class->SUPER::init(@_);
     my $root = $self->root->path;
-
-    $self->{'lockmgr'} = XAS::Lib::Lockmgr->new();
 
     $self->{'authors'} = XAS::Darkpan::Process::Authors->new(
         -schema  => $self->schema,

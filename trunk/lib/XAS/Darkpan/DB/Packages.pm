@@ -8,23 +8,15 @@ use XAS::Model::Database
 ;
 
 use DateTime;
-use Badger::URL;
 use CPAN::DistnameInfo;
-use Badger::Filesystem 'File';
 use Params::Validate 'HASHREF';
 use XAS::Darkpan::Lib::Package;
-use XAS::Darkpan::Parse::Packages;
 
 use XAS::Class
   debug   => 0,
   version => $VERSION,
   base    => 'XAS::Darkpan::DB::Base',
   utils   => 'dt2db :validation left',
-  vars => {
-    PARAMS => {
-      -url => { optional => 1, isa => 'Badger::URL', default => Badger::URL->new('http://www.cpan.org/modules/02packages.details.txt.gz') },
-    }
-  }
 ;
 
 use Data::Dumper;
@@ -35,15 +27,12 @@ use Data::Dumper;
 
 sub remove {
     my $self = shift;
-    my ($package, $version) = validate_params(\@_, [1,1]);
+    my ($id) = validate_params(\@_, [1]);
 
     my $schema = $self->schema;
-    my $criteria = {
-        package => $package,
-        version => $version,
-    };
+    my $rec->{'id'} = $id;
 
-    Packages->delete_records($schema, $criteria);
+    return Packages->delete_record($schema, $rec);
 
 }
 
@@ -195,74 +184,6 @@ sub fields {
     
 }
 
-sub load {
-    my $self = shift;
-
-    my $hash;
-    my @recs;
-    my $schema = $self->schema;
-    my $dt = DateTime->now(time_zone => 'local');
-    my $packages = XAS::Darkpan::Parse::Packages->new(
-        -cache_path   => $self->cache_path,
-        -cache_expiry => $self->cache_expiry,
-        -url          => $self->url,
-    );
-
-    $packages->load();
-    $packages->parse(sub {
-        my $data = shift;
-
-        my $info = CPAN::DistnameInfo->new($data->{'path'});
-
-    	return unless ($info->distvname);
-
-        # filter the packages
-
-        my $package = $info->dist;
-        $package =~ s/-/::/g;
-
-        $hash->{$package} = {      
-            dist      => $info->dist,
-            version   => $info->version   || '0.0',
-            maturity  => $info->maturity  || 'unknown',
-            filename  => $info->filename,
-            pauseid   => $info->cpanid    || 'unknown',
-            extension => $info->extension,
-            pathname  => $info->pathname,
-            mirror    => $self->url->server,
-            datetime  => dt2db($dt),
-        };
-
-    });
-
-    foreach my $key (sort(keys %$hash)) {
-
-        push(@recs, {
-            package   => $key,
-            dist      => $hash->{$key}->{'dist'},      
-            version   => $hash->{$key}->{'version'},
-            maturity  => $hash->{$key}->{'maturity'},
-            filename  => $hash->{$key}->{'filename'},
-            pauseid   => $hash->{$key}->{'pauseid'},
-            extension => $hash->{$key}->{'extension'},
-            pathname  => $hash->{$key}->{'pathname'},
-            mirror    => $hash->{$key}->{'mirror'},
-            datetime  => $hash->{$key}->{'datetime'},
-        });
-
-    }
-
-    $schema->txn_do(sub {
-
-        Packages->populate($schema, \@recs);
-
-    });
-
-    $hash  = {};
-    @recs  = ();
-
-}
-
 sub clear {
     my $self = shift;
     my $p = validate_params(\@_, {
@@ -285,6 +206,20 @@ sub count {
 
     return Packages->count($schema, $p->{'criteria'});
 
+}
+
+sub populate {
+    my $self = shift;
+    my ($data) = validate_params(\@_, [1]);
+
+    my $schema = $self->schema;
+
+    $schema->txn_do(sub {
+
+        Packages->populate($schema, $data);
+
+    });
+        
 }
 
 # ----------------------------------------------------------------------

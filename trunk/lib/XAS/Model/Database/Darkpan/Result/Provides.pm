@@ -54,6 +54,13 @@ __PACKAGE__->optimistic_locking_version_column('revision');
 __PACKAGE__->has_one( 
     packages => 'XAS::Model::Database::Darkpan::Result::Packages', 
     { 'foreign.id' => 'self.package_id' },
+    { 'cascade_delete' => 0 },
+);
+
+__PACKAGE__->has_many( 
+    permissions => 'XAS::Model::Database::Darkpan::Result::Permissions', 
+    { 'foreign.module' => 'self.module' },
+    { 'cascade_delete' => 1 },
 );
 
 sub sqlt_deploy_hook {

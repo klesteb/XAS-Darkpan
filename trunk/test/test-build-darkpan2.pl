@@ -15,6 +15,6 @@ my $process = XAS::Darkpan::Process->new(-schema => $schema, -root => $root);
 
 #$process->log->level('debug', 1);
 
-$process->create_authors();
+$process->create_directories();
 $process->load_database();
 

@@ -9,21 +9,13 @@ use XAS::Model::Database
 
 use DateTime;
 use JSON::XS;
-use Badger::URL;
-use Badger::Filesystem 'File';
-use Params::Validate 'HASHREF';
-use XAS::Darkpan::Parse::Mirrors;
+use Params::Validate 'ARRAYREF HASHREF';
 
 use XAS::Class
   debug   => 0,
   version => $VERSION,
   base    => 'XAS::Darkpan::DB::Base',
   utils   => 'dt2db :validation',
-  vars => {
-    PARAMS => {
-      -url => { optional => 1, isa => 'Badger::URL', default => Badger::URL->new('http://www.cpan.org/modules/07mirror.json') },
-    }
-  }
 ;
 
 use Data::Dumper;
@@ -152,31 +144,6 @@ sub fields {
     
 }
     
-sub load {
-    my $self = shift;
-
-    my @datum;
-    my $schema  = $self->schema;
-    my $dt = DateTime->now(time_zone => 'local');
-    my $mirrors = XAS::Darkpan::Parse::Mirrors->new(
-        -cache_path   => $self->cache_path,
-        -cache_expiry => $self->cache_expiry,
-        -url          => $self->url,
-    );
-
-    $mirrors->load();
-    $mirrors->parse(sub {
-        my $data = shift;
-        $data->{'datetime'} = dt2db($dt);
-        push(@datum, $data);
-    });
-
-    Mirrors->populate($schema, \@datum);
-
-    @datum = ();
-
-}
-
 sub clear {
     my $self = shift;
     my $p = validate_params(\@_, {
@@ -199,6 +166,20 @@ sub count {
 
     return Mirrors->count($schema, $p->{'criteria'});
 
+}
+
+sub populate {
+    my $self = shift;
+    my ($data) = validate_params(\@_, [1]);
+
+    my $schema = $self->schema;
+
+    $schema->txn_do(sub {
+
+        Mirrors->populate($schema, $data);
+
+    });
+        
 }
 
 # ----------------------------------------------------------------------

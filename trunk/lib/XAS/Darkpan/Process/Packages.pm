@@ -9,10 +9,11 @@ use CPAN::Meta;
 use Archive::Tar;
 use XAS::Darkpan;
 use CPAN::Checksums;
+use Badger::URL 'URL';
 use CPAN::DistnameInfo;
 use XAS::Darkpan::DB::Packages;
-use XAS::Darkpan::Lib::Package;
 use Archive::Zip ':ERROR_CODES';
+use XAS::Darkpan::Parse::Package;
 use Badger::Filesystem 'Dir File';
 use Params::Validate qw/CODEREF HASHREF/;
 use File::Spec::Functions qw/splitdir catfile/;
@@ -115,42 +116,150 @@ __HEADER
 
 }
 
+sub load {
+    my $self = shift;
+
+    my $hash;
+    my @recs;
+    my $dt = DateTime->now(time_zone => 'local');
+    my $packages = XAS::Darkpan::Parse::Packages->new(
+        -cache_path   => $self->cache_path,
+        -cache_expiry => $self->cache_expiry,
+        -url          => URL('http://www.cpan.org/modules/02packages.details.txt.gz'),
+    );
+
+    $packages->load();
+    $packages->parse(sub {
+        my $data = shift;
+
+        my $info = CPAN::DistnameInfo->new($data->{'path'});
+
+    	return unless ($info->distvname);
+
+        # filter the packages
+
+        my $package = $info->dist;
+        $package =~ s/-/::/g;
+
+        $hash->{$package} = {      
+            dist      => $info->dist,
+            version   => $info->version   || '0.0',
+            maturity  => $info->maturity  || 'unknown',
+            filename  => $info->filename,
+            pauseid   => $info->cpanid    || 'unknown',
+            extension => $info->extension,
+            pathname  => $info->pathname,
+            mirror    => $self->url->server,
+            datetime  => dt2db($dt),
+        };
+
+    });
+
+    foreach my $key (sort(keys %$hash)) {
+
+        push(@recs, {
+            package   => $key,
+            dist      => $hash->{$key}->{'dist'},      
+            version   => $hash->{$key}->{'version'},
+            maturity  => $hash->{$key}->{'maturity'},
+            filename  => $hash->{$key}->{'filename'},
+            pauseid   => $hash->{$key}->{'pauseid'},
+            extension => $hash->{$key}->{'extension'},
+            pathname  => $hash->{$key}->{'pathname'},
+            mirror    => $hash->{$key}->{'mirror'},
+            datetime  => $hash->{$key}->{'datetime'},
+        });
+
+    }
+
+    $self->database->populate(\@recs);
+
+    $hash  = {};
+    @recs  = ();
+
+}
+
 sub inject {
     my $self = shift;
     my $p = validate_params(\@_, {
-        -pause_id => 1,
-        -package  => 1,
-        -mirror   => { optional => 1, isa => 'Badger::URL', default => $self->mirror },
-        -source   => { optional => 1, isa => 'Badger::Filesystem::Directory', default => $self->path },
+        -pauseid => 1,
+        -package => 1,
+        -mirror  => { optional => 1, isa => 'Badger::URL', default => $self->mirror },
+        -source  => { optional => 1, isa => 'Badger::Filesystem::Directory', default => $self->path },
     });
 
     my @parts;
+    my $results;
     my $source   = $p->{'source'};
-    my $pause_id = uc($p->{'pause_id'});
+    my $pauseid = uc($p->{'pauseid'});
     my $package  = $p->{'package'};
-    
-    $parts[0] = left($pause_id, 1);
-    $parts[1] = left($pause_id, 2);
-    $parts[2] = $pause_id;
 
-    $self->database->add(
+    $parts[0] = left($pauseid, 1);
+    $parts[1] = left($pauseid, 2);
+    $parts[2] = $pauseid;
+
+    $results = $self->database->add(
         -path   => Dir($source, @parts, $package)->path,
         -mirror => $p->{'mirror'}->service,
     );
+
+    return $results;
+    
+}
+
+sub remove {
+    my $self = shift;
+    my {$id) = validate_params(\@_, [1]);
+
+    my $result = undef;
+    my $criteria = {
+        id => $id
+    };
+
+    if (my $package = $self->database->find(-criteria => $criteria)) {
+
+        my $path      = Dir($package->pathname)->directory;
+        my $ext       = $package->extension;
+        my $version   = $package->version;
+        my $dist      = $package->dist;
+        my $distvname = sprintf("%s-%s", $dist, $version);
+        my $file      = File($path, $distvname . ".$ext");
+        my $readme    = File($path, $distvname . '.readme');
+        my $lock      = $file->directory;
+
+        $self->lockmgr->add(-key => $lock);
+
+	    if ($self->lockmgr->lock($lock)) {
+
+            $file->delete   if ($file->exists);
+            $readme->delete if ($readme->exists);
+
+            $self->_checksum($file->directory);
+
+            $self->lockmgr->unlock($lock);
+
+        }
+        $self->lockmgr->remove($lock);
+
+        $result = $self->database->remove($package->id);
+        
+    }
+
+    return $result;
 
 }
 
 sub process {
     my $self = shift;
     my $p = validate_params(\@_, {
-       -pause_id    => 1,
+       -pauseid     => 1,
        -package_id  => 1,
 	   -url         => { isa => 'Badger::URL', },
        -destination => { isa => 'Badger::Filesystem::Directory' },
     });
 
     my $url         = $p->{'url'};
-    my $pause_id    = uc($p->{'pause_id'});
+    my $pauseid     = uc($p->{'pauseid'});
     my $package_id  = $p->{'package_id'};
     my $destination = $p->{'destination'};
 
@@ -161,9 +270,9 @@ sub process {
     $self->log->debug('entering process()');
 
     $parts[0] = $destination;
-    $parts[1] = left($pause_id, 1);
-    $parts[2] = left($pause_id, 2);
-    $parts[3] = $pause_id;
+    $parts[1] = left($pauseid, 1);
+    $parts[2] = left($pauseid, 2);
+    $parts[3] = $pauseid;
     $parts[4] = File($url->path)->name;
 
     $file = File(@parts);
@@ -174,8 +283,6 @@ sub process {
     if ($self->lockmgr->lock($lock)) {
 
         if ($self->_copy_archive($url, $file)) {
-
-            $self->log->info(sprintf('copied: %s, to %s', $url, $file));
 
             $self->_load_archive($file, $package_id);
             $self->_create_readme($file);
@@ -1293,7 +1400,6 @@ sub init {
 
     $self->{'database'} = XAS::Darkpan::DB::Packages->new(
         -schema => $self->schema,
-        -url    => $self->mirror,
     );
 
     $self->lockmgr->add(-key => $self->path);

@@ -4,16 +4,12 @@ our $VERSION = '0.01';
 
 use XAS::Model::Database
   schema => 'XAS::Model::Database::Darkpan',
-  table  => 'Authors Packages Permissions'
+  table  => 'Authors'
 ;
 
 use DateTime;
-use Try::Tiny;
-use Badger::URL;
 use XAS::Darkpan::Lib::Author;
-use Params::Validate 'HASHREF';
-use XAS::Darkpan::Parse::Authors;
-use Badger::Filesystem 'Dir File';
+use Params::Validate 'ARRAYREF HASHREF';
 
 use XAS::Class
   debug     => 0,
@@ -21,11 +17,6 @@ use XAS::Class
   base      => 'XAS::Darkpan::DB::Base',
   accessors => 'authors',
   utils     => 'dt2db :validation',
-  vars => {
-    PARAMS => {
-      -url => { optional => 1, isa => 'Badger::URL', default => Badger::URL->new('http://www.cpan.org/authors/01mailrc.txt.gz') },
-    }
-  }
 ;
 
 #use Data::Dumper;
@@ -40,71 +31,10 @@ sub remove {
 
     $self->log->debug("authors: entering remove");
     
-    my $result = undef;
     my $rec->{'id'} = $id;
     my $schema = $self->schema;
 
-    my $criteria = {
-        id => $id
-    };
-    
-    try {
-        
-        if (my $author = Authors->find($schema, $criteria)) {
-        
-            if (my $packages = $author->search_related('packages')) {
-                
-                while (my $package = $packages->next) {
-                                        
-                    my $path      = Dir($package->pathname)->directory;
-                    my $ext       = $package->extension;
-                    my $version   = $package->version;
-                    my $dist      = $package->dist;
-                    my $distvname = sprintf("%s-%s", $dist, $version);
-                        
-                    my $checksum = File($path, 'CHECKSUM');
-                    my $file     = File($path, $distvname . ".$ext");
-                    my $readme   = File($path, $distvname . '.readme');
-                    
-                    if ($file->exists) {
-                        
-                        $file->delete;
-                        $self->log->info(sprintf("removing %s", $file));
-                        
-                    }
-                        
-                    if ($readme->exists) {
-                        
-                        $readme->delete;
-                        $self->log->info(sprintf("removing %s", $readme));
-                        
-                    }
-                    
-                    if ($checksum->exists) {
-                        
-                        $checksum->delete;
-                        $self->log->info(sprintf("removing %s", $checksum));
-                        
-                    }
-
-                }
-                
-            }
-
-            $result = Authors->delete_record($schema, $rec);
-
-        }
-        
-    } catch {
-            
-        my $ex = $_;
-        $self->log->fatal($ex);
-            
-    };
-    
-    $self->log->debug("authors: leaving remove");
-
-    return $result;
+    return Authors->delete_record($schema, $rec);
     
 }
 
@@ -214,32 +144,6 @@ sub fields {
     
 }
 
-sub load {
-    my $self = shift;
-
-    my @datum;
-    my $schema = $self->schema;
-    my $dt = DateTime->now(time_zone => 'local');
-    my $authors = XAS::Darkpan::Parse::Authors->new(
-        -cache_path   => $self->cache_path,
-        -cache_expiry => $self->cache_expiry,
-        -url          => $self->url,
-    );
-
-    $authors->load();
-    $authors->parse(sub {
-        my $data = shift;
-        $data->{'datetime'} = dt2db($dt);
-        return unless (defined($data->{'pauseid'}));
-        push(@datum, $data);
-    });
-
-    Authors->populate($schema, \@datum);
-
-    @datum = ();
-
-}
-
 sub clear {
     my $self = shift;
     my $p = validate_params(\@_, {
@@ -262,6 +166,20 @@ sub count {
 
     return Authors->count($schema, $p->{'criteria'});
 
+}
+
+sub populate {
+    my $self = shift;
+    my ($data) = validate_params(\@_, [1]);
+
+    my $schema = $self->schema;
+
+    $schema->txn_do(sub {
+
+        Authors->populate($schema, $data);
+
+    });
+        
 }
 
 # ----------------------------------------------------------------------

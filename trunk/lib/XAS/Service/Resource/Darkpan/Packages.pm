@@ -1,4 +1,4 @@
-package XAS::Service::Resource::Darkpan::Mirrors;
+package XAS::Service::Resource::Darkpan::Packages;
 
 use strict;
 use warnings;
@@ -13,7 +13,7 @@ use XAS::Utils 'dt2db';
 use XAS::Service::Search;
 use Badger::Filesystem 'File';
 use parent 'XAS::Service::Resource';
-use XAS::Service::Validate::Darkpan::Mirrors;
+use XAS::Service::Validate::Darkpan::Packages;
 use Web::Machine::Util qw( bind_path create_header );
 
 # -------------------------------------------------------------------------
@@ -28,9 +28,9 @@ sub init {
 
     $self->{'processor'} = $args->{'processor'};
     
-    my @fields = $self->processor->mirrors->database->fields();
+    my @fields = $self->processor->packages->database->fields();
 
-    $self->{'validate'} = XAS::Service::Validate::Darkpan::Mirrors->new();
+    $self->{'validate'} = XAS::Service::Validate::Darkpan::Packages->new();
     $self->{'search'}   = XAS::Service::Search->new(-columns => \@fields);
 
 }
@@ -60,7 +60,7 @@ sub malformed_request {
 
             unless ($id eq '_search') {
 
-                if ($self->processor->mirrors->find(-criteria => { id => $id })) {
+                if ($self->procssor->packages->find(-criteria => { id => $id })) {
 
                     $stat = 0;
 
@@ -74,7 +74,7 @@ sub malformed_request {
 
         if (my $id = bind_path('/:id', $path)) {
 
-            if ($self->processor->mirrors->find(-criteria => { id => $id })) {
+            if ($self->processor->packages->find(-criteria => { id => $id })) {
 
                 $stat = 0;
 
@@ -96,7 +96,7 @@ sub malformed_request {
 
         if (my $id = bind_path('/:id', $path)) {
 
-            if ($self->processor->mirrors->find(-criteria => { id => $id })) {
+            if ($self->processor->packages->find(-criteria => { id => $id })) {
 
                 $stat = 0;
 
@@ -126,7 +126,7 @@ sub resource_exists {
 
         if (my $id = bind_path('/:id', $path)) {
 
-            if ($self->processor->mirrors->find(-criteria => { id => $id })) {
+            if ($self->processor->packages->find(-criteria => { id => $id })) {
 
                 $stat = 1;
 
@@ -142,7 +142,7 @@ sub resource_exists {
 
         if (my $id = bind_path('/:id', $path)) {
 
-            if ($self->processor->mirrors->find(-criteria => { id => $id })) {
+            if ($self->processor->packages->find(-criteria => { id => $id })) {
 
                 $stat = 1;
 
@@ -154,7 +154,7 @@ sub resource_exists {
 
         if (my $id = bind_path('/:id', $path)) {
 
-            if ($self->processor->mirrors->find(-criteria => { id => $id })) {
+            if ($self->processor->packages->find(-criteria => { id => $id })) {
 
                 $stat = 1;
 
@@ -182,7 +182,7 @@ sub delete_resource {
     
     $self->log->debug("$alias: delete_resource - $path");
 
-    if ($self->processor->mirrors->remove($id)) {
+    if ($self->processor->packages->remove($id)) {
 
         $stat = 1;
 
@@ -203,8 +203,8 @@ sub get_navigation {
        link => '/api',
        text => 'Root',
     },{
-       link => '/api/mirrors',
-       text => 'Mirrors'
+       link => '/api/packages',
+       text => 'Packages'
     }];
 
 }
@@ -218,8 +218,8 @@ sub get_links {
             href  => '/api',
         },
         self => {
-            title => 'Mirrors',
-            href  => '/api/mirrors',
+            title => 'Packages',
+            href  => '/api/packages',
         },
     };
 
@@ -241,18 +241,18 @@ sub get_response {
         my $criteria = shift;
         my $options  = shift;
 
-        my $recs = $self->process->mirrors->search(-criteria => $criteria, -options => $options);
+        my $recs = $self->processor->packages->search(-criteria => $criteria, -options => $options);
 
         while (my $datum = $recs->next) {
 
             my $rec = $self->build_response($datum);
-            push(@{$data->{'_embedded'}->{'mirrors'}}, $rec);
+            push(@{$data->{'_embedded'}->{'packages'}}, $rec);
 
         }
 
         $data->{'_links'}->{'children'} = [{
             title => 'Create',
-            href  => '/api/mirrors',
+            href  => '/api/packages',
         }];
         
     };
@@ -324,7 +324,7 @@ sub process_params {
                 if (defined($valids->{'cancel'})) {
 
                     # from the html interface, if the cancel button was pressed,
-                    # redirect back to /api/mirrors
+                    # redirect back to /api/packages
 
                     $stat = \301;
                     $self->response->header('Location' => sprintf('%s', $uri->path));
@@ -401,10 +401,10 @@ sub build_20X {
     $data->{'_links'}     = $self->get_links();
     $data->{'navigation'} = $self->get_navigation();
 
-    if (my $rec = $self->processor->mirrors->find(-criteria => $criteria)) {
+    if (my $rec = $self->processor->packages->find(-criteria => $criteria)) {
         
         my $info = $self->build_response($rec);
-        $data->{'_embedded'}->{'mirrors'} = $info;
+        $data->{'_embedded'}->{'packages'} = $info;
         
     }
 
@@ -416,15 +416,25 @@ sub post_data {
     my $self   = shift;
     my $params = shift;
 
+    my $results = undef;
     my $alias = $self->alias;
 
     $self->log->debug("$alias: post_data");
 
-    my $results = $self->procssor->mirrors->add(
-        -type   => $params->{'type'},
-        -mirror => $params->{'mirror'},
+    my $rec = $self->processor->packages->inject(
+        -pauseid => $params->{'pauseid'},
+        -package => $params->{'package'},
+        -mirror  => $params->{'mirror'},
+        -source  => $self->path,
     );
 
+    $self->processor->packages->process(
+        -pauseid     => $params->{'pauseid'},
+        -package_id  => $rec->{'id'},
+        -url         => URL($params->{'source'}),
+        -destination => $self->path
+    );
+    
     return $results;
 
 }
@@ -437,10 +447,12 @@ sub put_data {
 
     $self->log->debug("$alias: put_data");
 
-    my $results = $self->processor->mirrors->update(
-        -id     => $params->{'id'},
-        -type   => $params->{'type'},
-        -mirror => $params->{'mirror'},
+    my $results = $self->processor->packages->update(
+        -id      => $params->{'id'},
+        -pauseid => $params->{'pauseid'},
+        -name    => $params->{'name'},
+        -email   => $params->{'email'},
+        -mirror  => $params->{'mirror'},
     );
 
     return $results;
@@ -454,14 +466,16 @@ sub build_response {
     my $id = $rec->id;
     my $data = {
         _links => {
-            self   => { href => "/api/mirrors/$id", title => 'Self' },
-            delete => { href => "/api/mirrors/$id", title => 'Delete' },
-            update => { href => "/api/mirrors/$id", title => 'Update' },
+            self   => { href => "/api/packages/$id", title => 'Self' },
+            delete => { href => "/api/packages/$id", title => 'Delete' },
+            update => { href => "/api/packages/$id", title => 'Update' },
         }
     };
 
     $data->{'id'}       = $rec->id;
-    $data->{'type'}     = $rec->type;
+    $data->{'pauseid'}  = $rec->pauseid;
+    $data->{'name'}     = $rec->name;
+    $data->{'email'}    = $rec->email;
     $data->{'mirror'}   = $rec->mirror;
     $data->{'datetime'} = dt2db($rec->datetime);
 
@@ -472,7 +486,7 @@ sub build_response {
 sub create_form {
     my $self = shift;
 
-    # pauseid: the mirrors PAUSE name
+    # pauseid: the packages PAUSE name
     # name:    full name
     # email:   email address for pauseid
     # mirror:  mirror the pauseid is associated with
@@ -481,7 +495,7 @@ sub create_form {
         name    => 'create',
         method  => 'POST',
         enctype => 'application/x-www-form-urlencoded',
-        url     => '/api/mirrors',
+        url     => '/api/packages',
         items => [{
             type  => 'hidden',
             name  => 'action',
@@ -490,26 +504,38 @@ sub create_form {
             type => 'fieldset',
             legend => 'Create a new Author',
             fields => [{
+                id       => 'pauseid',
+                label    => 'Pause Id',
+                type     => 'textfield',
+                name     => 'pauseid',
+                tabindex => 1,
+                required => 1,
+            },{
+                id       => 'name',
+                label    => 'Name',
+                type     => 'textfield',
+                name     => 'name',
+                tabindex => 2,
+                required => 1,
+            },{
+                id       => 'email',
+                label    => 'Email',
+                type     => 'textfield',
+                name     => 'email',
+                tabindex => 3,
+                required => 1,
+            },{
                 id       => 'mirror',
                 label    => 'Mirror',
                 type     => 'textfield',
                 name     => 'mirror',
                 value    => 'http://www.cpan.org',
-                tabindex => 1,
-                required => 1,
-            },{
-                id       => 'type',
-                label    => 'Type',
-                type     => 'select',
-                name     => 'mirror',
-                options  => ['master', 'mirror'],
-                value    => 'master',
-                tabindex => 2,
-                required => 1,
+                tabindex => 4,
+                required => 0,
             }]
         },{
             type     => 'standard_buttons',
-            tabindex => 3,
+            tabindex => 5,
         }]
     };
 
@@ -548,22 +574,22 @@ __END__
 
 =head1 NAME
 
-XAS::Service::Resource::Darkpan::Mirrors - Perl extension for the XAS environment
+XAS::Service::Resource::Darkpan::Packages - Perl extension for the XAS environment
 
 =head1 SYNOPSIS
 
  my $builder = Plack::Builder->new();
 
- $builder->mount('/api/mirrors' => Web::Machine->new(
-     resource => 'XAS::Service::Resource::Darkpan::Mirrors',
+ $builder->mount('/api/packages' => Web::Machine->new(
+     resource => 'XAS::Service::Resource::Darkpan::Packages',
      resource_args => [
-         alias           => 'mirrors',
+         alias           => 'packages',
          template        => $template,
          json            => $json,
          app_name        => $name,
          app_description => $description,
          authenticator   => $authen,
-         processor => XAS::Darkpan::Process::Mirrors->new(
+         processor => XAS::Darkpan::Process::Packages->new(
              -schema  => $schema,
              -lockmgr => $lockmgr,
              -path    => Dir($dpath, 'modules'),
@@ -575,7 +601,7 @@ XAS::Service::Resource::Darkpan::Mirrors - Perl extension for the XAS environmen
 =head1 DESCRIPTION
 
 This module inherits from L<XAS::Service::Resource|XAS::Service::Resource>. It
-provides a link to "/api/mirrors" and the services it provides.
+provides a link to "/api/packages" and the services it provides.
 
 =head1 METHODS - Web::Machine::Resource
 
@@ -591,7 +617,7 @@ are additional arguments.
 
 =item B<processor>
 
-The processor used to manage the mirrors table.
+The processor used to manage the packages table.
 
 =back
 
@@ -650,9 +676,9 @@ This returns the handle for searches.
 
 This returns the handle for data validation.
 
-=head2 mirrors
+=head2 packages
 
-This returns the handle to access the mirrors functionality.
+This returns the handle to access the packages functionality.
 
 =head1 SEE ALSO
 

@@ -3,8 +3,9 @@ package XAS::Darkpan::Process::Mirrors;
 our $VERSION = '0.01';
 
 use IO::Zlib;
-use Badger::URL;
+use Badger::URL 'URL';
 use XAS::Darkpan::DB::Mirrors;
+use XAS::Darkpan::Parse::Mirrors;
 use Badger::Filesystem 'Dir File';
 
 use XAS::Class
@@ -56,6 +57,30 @@ sub create {
 
 }
 
+sub load {
+    my $self = shift;
+
+    my @datum;
+    my $dt = DateTime->now(time_zone => 'local');
+    my $mirrors = XAS::Darkpan::Parse::Mirrors->new(
+        -cache_path   => $self->cache_path,
+        -cache_expiry => $self->cache_expiry,
+        -url          => URL('http://www.cpan.org/modules/07mirror.json'),
+    );
+
+    $mirrors->load();
+    $mirrors->parse(sub {
+        my $data = shift;
+        $data->{'datetime'} = dt2db($dt);
+        push(@datum, $data);
+    });
+
+    $self->database->populate(\@datum);
+
+    @datum = ();
+
+}
+
 sub inject {
     my $self = shift;
     my $p = validate_params(\@_, {
@@ -68,6 +93,14 @@ sub inject {
         -type   => $p->{'type'},
     );
 
+}
+
+sub remove {
+    my $self = shift;
+    my ($id) = validate_params(\@_, [1]);
+    
+    $self->database->remove($id);
+    
 }
 
 # ----------------------------------------------------------------------
@@ -83,7 +116,6 @@ sub init {
 
     $self->{'database'} = XAS::Darkpan::DB::Mirrors->new(
         -schema => $self->schema,
-        -url    => $self->mirror,
     );
 
     $self->lockmgr->add(-key => $self->path);

@@ -12,7 +12,6 @@ use Data::Dumper;
 use XAS::Utils 'dt2db';
 use XAS::Service::Search;
 use Badger::Filesystem 'File';
-use XAS::Darkpan::Process::Authors;
 use parent 'XAS::Service::Resource';
 use XAS::Service::Validate::Darkpan::Authors;
 use Web::Machine::Util qw( bind_path create_header );
@@ -27,9 +26,9 @@ sub init {
 
     $self->SUPER::init($args);
 
-    $self->{'authors'} = $args->{'processor'};
+    $self->{'processor'} = $args->{'processor'};
     
-    my @fields = $self->authors->database->fields();
+    my @fields = $self->processor->authors->database->fields();
 
     $self->{'validate'} = XAS::Service::Validate::Darkpan::Authors->new();
     $self->{'search'}   = XAS::Service::Search->new(-columns => \@fields);
@@ -61,7 +60,7 @@ sub malformed_request {
 
             unless ($id eq '_search') {
 
-                if ($self->authors->database->find(-criteria => { id => $id })) {
+                if ($self->procesor->authors->find(-criteria => { id => $id })) {
 
                     $stat = 0;
 
@@ -75,7 +74,7 @@ sub malformed_request {
 
         if (my $id = bind_path('/:id', $path)) {
 
-            if ($self->authors->database->find(-criteria => { id => $id })) {
+            if ($self->processor->authors->find(-criteria => { id => $id })) {
 
                 $stat = 0;
 
@@ -97,7 +96,7 @@ sub malformed_request {
 
         if (my $id = bind_path('/:id', $path)) {
 
-            if ($self->authors->database->find(-criteria => { id => $id })) {
+            if ($self->processor->authors->find(-criteria => { id => $id })) {
 
                 $stat = 0;
 
@@ -127,7 +126,7 @@ sub resource_exists {
 
         if (my $id = bind_path('/:id', $path)) {
 
-            if ($self->authors->database->find(-criteria => { id => $id })) {
+            if ($self->processor->authors->find(-criteria => { id => $id })) {
 
                 $stat = 1;
 
@@ -143,7 +142,7 @@ sub resource_exists {
 
         if (my $id = bind_path('/:id', $path)) {
 
-            if ($self->authors->database->find(-criteria => { id => $id })) {
+            if ($self->processor->authors->find(-criteria => { id => $id })) {
 
                 $stat = 1;
 
@@ -155,7 +154,7 @@ sub resource_exists {
 
         if (my $id = bind_path('/:id', $path)) {
 
-            if ($self->authors->database->find(-criteria => { id => $id })) {
+            if ($self->processor->authors->find(-criteria => { id => $id })) {
 
                 $stat = 1;
 
@@ -180,10 +179,29 @@ sub delete_resource {
     my $alias = $self->alias;
     my $path  = $self->request->path_info;
     my $id    = bind_path('/:id', $path);
+    my $criteria1 = {
+        id => $id
+    };
     
     $self->log->debug("$alias: delete_resource - $path");
 
-    if ($self->authors->database->remove($id)) {
+    if (my $author = $self->processor->authors->find(-criteria => $criteria1)) {
+        
+        my $criteria2 = {
+            pauseid = $author->pauseid
+        };
+        
+        if (my $pacakges = $self->processor->packages->search(-criteria => $criteria2)) {
+            
+            while (my $package = $packages->next) {
+
+                $self->processor->packages->remove($package->id);
+                
+            }
+            
+        }
+
+        $self->processor->authors->remove($id);
 
         $stat = 1;
 
@@ -242,7 +260,7 @@ sub get_response {
         my $criteria = shift;
         my $options  = shift;
 
-        my $recs = $self->authors->search(-criteria => $criteria, -options => $options);
+        my $recs = $self->processor->authors->search(-criteria => $criteria, -options => $options);
 
         while (my $datum = $recs->next) {
 
@@ -402,7 +420,7 @@ sub build_20X {
     $data->{'_links'}     = $self->get_links();
     $data->{'navigation'} = $self->get_navigation();
 
-    if (my $rec = $self->authors->database->find(-criteria => $criteria)) {
+    if (my $rec = $self->processor->authors->find(-criteria => $criteria)) {
         
         my $info = $self->build_response($rec);
         $data->{'_embedded'}->{'authors'} = $info;
@@ -421,7 +439,7 @@ sub post_data {
 
     $self->log->debug("$alias: post_data");
 
-    my $results = $self->authors->database->add(
+    my $results = $self->processor->authors->add(
         -pauseid => $params->{'pauseid'},
         -name    => $params->{'name'},
         -email   => $params->{'email'},
@@ -440,7 +458,7 @@ sub put_data {
 
     $self->log->debug("$alias: put_data");
 
-    my $results = $self->authors->database->update(
+    my $results = $self->processor->authors->update(
         -id      => $params->{'id'},
         -pauseid => $params->{'pauseid'},
         -name    => $params->{'name'},
@@ -554,10 +572,10 @@ sub validate {
 
 }
 
-sub authors {
+sub processor {
     my $self = shift;
 
-    return $self->{'authors'};
+    return $self->{'processor'};
 
 }
 
@@ -582,10 +600,10 @@ XAS::Service::Resource::Darkpan::Authors - Perl extension for the XAS environmen
          app_name        => $name,
          app_description => $description,
          authenticator   => $authen,
-         processor => XAS::Darkpan::Process::Authors->new(
+         processor => XAS::Darkpan::Process->new(
              -schema  => $schema,
              -lockmgr => $lockmgr,
-             -path    => Dir($dpath, 'authors', 'id'),
+             -path    => Dir($dpath),
              -mirror  => $mirror->copy()
         )
      ])
