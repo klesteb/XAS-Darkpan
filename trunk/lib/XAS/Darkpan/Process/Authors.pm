@@ -79,7 +79,7 @@ sub load {
     my $authors = XAS::Darkpan::Parse::Authors->new(
         -cache_path   => $self->cache_path,
         -cache_expiry => $self->cache_expiry,
-        -url          => URL('http://www.cpan.org/authors/01mailrc.txt.gz'),
+        -url          => $self->master,
     );
 
     $authors->load();
@@ -136,7 +136,7 @@ sub init {
 
     my $self = $class->SUPER::init(@_);
 
-    $self->mirror->path('/authors/01mailrc.txt.gz');
+    $self->master->path('/authors/01mailrc.txt.gz');
 
     $self->{'database'} = XAS::Darkpan::DB::Authors->new(
         -schema => $self->schema,

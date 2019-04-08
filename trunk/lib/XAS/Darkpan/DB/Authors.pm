@@ -9,7 +9,7 @@ use XAS::Model::Database
 
 use DateTime;
 use XAS::Darkpan::Lib::Author;
-use Params::Validate 'ARRAYREF HASHREF';
+use Params::Validate 'HASHREF';
 
 use XAS::Class
   debug     => 0,

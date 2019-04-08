@@ -65,7 +65,7 @@ sub load {
     my $mirrors = XAS::Darkpan::Parse::Mirrors->new(
         -cache_path   => $self->cache_path,
         -cache_expiry => $self->cache_expiry,
-        -url          => URL('http://www.cpan.org/modules/07mirror.json'),
+        -url          => $self->master,
     );
 
     $mirrors->load();
@@ -112,7 +112,7 @@ sub init {
 
     my $self = $class->SUPER::init(@_);
 
-    $self->mirror->path('/modules/07mirror.json');
+    $self->master->path('/modules/07mirror.json');
 
     $self->{'database'} = XAS::Darkpan::DB::Mirrors->new(
         -schema => $self->schema,

@@ -8,7 +8,7 @@ use XAS::Model::Database
 ;
 
 use DateTime;
-use Params::Validate 'ARRAYREF HASHREF';
+use Params::Validate 'HASHREF';
 
 use XAS::Class
   debug     => 0,

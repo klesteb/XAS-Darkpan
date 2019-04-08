@@ -13,7 +13,7 @@ use Badger::URL 'URL';
 use CPAN::DistnameInfo;
 use XAS::Darkpan::DB::Packages;
 use Archive::Zip ':ERROR_CODES';
-use XAS::Darkpan::Parse::Package;
+use XAS::Darkpan::Parse::Packages;
 use Badger::Filesystem 'Dir File';
 use Params::Validate qw/CODEREF HASHREF/;
 use File::Spec::Functions qw/splitdir catfile/;
@@ -125,7 +125,7 @@ sub load {
     my $packages = XAS::Darkpan::Parse::Packages->new(
         -cache_path   => $self->cache_path,
         -cache_expiry => $self->cache_expiry,
-        -url          => URL('http://www.cpan.org/modules/02packages.details.txt.gz'),
+        -url          => $self->master,
     );
 
     $packages->load();
@@ -209,7 +209,7 @@ sub inject {
 
 sub remove {
     my $self = shift;
-    my {$id) = validate_params(\@_, [1]);
+    my ($id) = validate_params(\@_, [1]);
 
     my $result = undef;
     my $criteria = {
@@ -1396,7 +1396,7 @@ sub init {
 
     my $self = $class->SUPER::init(@_);
 
-    $self->mirror->path('/authors/02packages.details.txt.gz');
+    $self->master->path('/authors/02packages.details.txt.gz');
 
     $self->{'database'} = XAS::Darkpan::DB::Packages->new(
         -schema => $self->schema,

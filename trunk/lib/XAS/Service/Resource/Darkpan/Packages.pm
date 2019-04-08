@@ -9,6 +9,7 @@ use POE;
 use DateTime;
 use Try::Tiny;
 use Data::Dumper;
+use Badger::URL 'URL';
 use XAS::Utils 'dt2db';
 use XAS::Service::Search;
 use Badger::Filesystem 'File';
@@ -35,7 +36,7 @@ sub init {
 
 }
 
-sub allowed_methods { [qw[ OPTIONS GET POST PUT DELETE ]] }
+sub allowed_methods { [qw[ OPTIONS GET POST DELETE ]] }
 
 sub create_path {
     my $self = shift;
@@ -92,18 +93,6 @@ sub malformed_request {
 
         }
 
-    } elsif ($method eq 'PUT') {
-
-        if (my $id = bind_path('/:id', $path)) {
-
-            if ($self->processor->packages->find(-criteria => { id => $id })) {
-
-                $stat = 0;
-
-            }
-
-        }
-
     }
 
     return $stat;
@@ -137,18 +126,6 @@ sub resource_exists {
     } elsif ($method eq 'POST') {
 
         $stat = 1;
-
-    } elsif ($method eq 'PUT') {
-
-        if (my $id = bind_path('/:id', $path)) {
-
-            if ($self->processor->packages->find(-criteria => { id => $id })) {
-
-                $stat = 1;
-
-            }
-
-        }
 
     } elsif ($method eq 'GET') {
 
@@ -344,23 +321,6 @@ sub process_params {
 
                 }
 
-            } elsif ($action eq 'put') {
-                
-                $valids->{'id'} = bind_path('/:id', $path);
-                
-                # this will produce a 205 response code. we need
-                # to manually create the response body.
-
-                $stat    = 1;
-                $results = $self->put_data($valids);
-                $data    = $self->build_20X($results);
-                $body    = $self->format_body($data);
-
-                $self->response->body($body);
-                $self->response->header('Location' => $uri->path);
-
-                $stat = \205;
-                
             } else {
 
                 $stat = \404;
@@ -416,7 +376,6 @@ sub post_data {
     my $self   = shift;
     my $params = shift;
 
-    my $results = undef;
     my $alias = $self->alias;
 
     $self->log->debug("$alias: post_data");
@@ -424,39 +383,19 @@ sub post_data {
     my $rec = $self->processor->packages->inject(
         -pauseid => $params->{'pauseid'},
         -package => $params->{'package'},
-        -mirror  => $params->{'mirror'},
-        -source  => $self->path,
+        -mirror  => URL($params->{'mirror'}),
+        -source  => $self->processor->authors->path,
     );
 
     $self->processor->packages->process(
         -pauseid     => $params->{'pauseid'},
         -package_id  => $rec->{'id'},
         -url         => URL($params->{'source'}),
-        -destination => $self->path
+        -destination => $self->processor->authors->path
     );
     
-    return $results;
-
-}
-
-sub put_data {
-    my $self   = shift;
-    my $params = shift;
-
-    my $alias = $self->alias;
-
-    $self->log->debug("$alias: put_data");
-
-    my $results = $self->processor->packages->update(
-        -id      => $params->{'id'},
-        -pauseid => $params->{'pauseid'},
-        -name    => $params->{'name'},
-        -email   => $params->{'email'},
-        -mirror  => $params->{'mirror'},
-    );
-
-    return $results;
-
+    return $rec;
+    
 }
 
 sub build_response {

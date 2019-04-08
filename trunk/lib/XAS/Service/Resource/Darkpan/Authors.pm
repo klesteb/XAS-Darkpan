@@ -188,10 +188,10 @@ sub delete_resource {
     if (my $author = $self->processor->authors->find(-criteria => $criteria1)) {
         
         my $criteria2 = {
-            pauseid = $author->pauseid
+            pauseid => $author->pauseid
         };
         
-        if (my $pacakges = $self->processor->packages->search(-criteria => $criteria2)) {
+        if (my $packages = $self->processor->packages->search(-criteria => $criteria2)) {
             
             while (my $package = $packages->next) {
 

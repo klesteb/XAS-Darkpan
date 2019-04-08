@@ -50,7 +50,7 @@ sub build_routes {
     my $processor = XAS::Darkpan::Process->new(
         -schema  => $schema,
         -lockmgr => $lockmgr,
-        -path    => Dir($dpath),
+        -root    => Dir($dpath),
         -mirror  => $mirror->copy()
     );
     
@@ -84,6 +84,19 @@ sub build_routes {
         resource => 'XAS::Service::Resource::Darkpan::Mirrors',
         resource_args => [
             alias           => 'mirrors',
+            template        => $template,
+            json            => $json,
+            app_name        => $name,
+            app_description => $description,
+            authenticator   => $authen,
+            processor       => $processor,
+        ])
+    );
+
+    $$urlmap->mount('/api/packages' => Web::Machine->new(
+        resource => 'XAS::Service::Resource::Darkpan::Packages',
+        resource_args => [
+            alias           => 'packages',
             template        => $template,
             json            => $json,
             app_name        => $name,

@@ -66,7 +66,7 @@ sub init {
 
     my $self = $class->SUPER::init(@_);
 
-    $self->mirror->path('/modules/03modlist.data.gz');
+    $self->master->path('/modules/03modlist.data.gz');
 
     $self->lockmgr->add(-key => $self->path);
     

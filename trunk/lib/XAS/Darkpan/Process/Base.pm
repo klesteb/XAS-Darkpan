@@ -2,7 +2,7 @@ package XAS::Darkpan::Process::Base;
 
 our $VERSION = '0.01';
 
-use Badger::URL;
+use Badger::URL 'URL';
 
 use XAS::Class
   debug     => 0,
@@ -15,6 +15,7 @@ use XAS::Class
       -lockmgr => 1,
       -mirror  => { isa => 'Badger::URL' },
       -path    => { isa => 'Badger::Filesystem::Directory' },
+      -master  => { optional => 1, isa => 'Badger::URL', default => URL('http://www.cpan.org') },
     }
   }
 ;

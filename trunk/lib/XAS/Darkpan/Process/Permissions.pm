@@ -102,7 +102,7 @@ sub load {
     my $perms = XAS::Darkpan::Parse::Permissions->new(
         -cache_path   => $self->cache_path,
         -cache_expiry => $self->cache_expiry,
-        -url          => URL('http://www.cpan.org/modules/06perms.txt.gz'),
+        -url          => $self->master,
     );
 
     $perms->load();
@@ -163,7 +163,7 @@ sub init {
 
     my $self = $class->SUPER::init(@_);
 
-    $self->mirror->path('/modules/06perms.txt.gz');
+    $self->master->path('/modules/06perms.txt.gz');
 
     $self->{'database'} = XAS::Darkpan::DB::Permissions->new(
         -schema => $self->schema,
