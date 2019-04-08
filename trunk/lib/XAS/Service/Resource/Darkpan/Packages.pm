@@ -11,6 +11,7 @@ use Try::Tiny;
 use Data::Dumper;
 use Badger::URL 'URL';
 use XAS::Utils 'dt2db';
+use CPAN::DistnameInfo;
 use XAS::Service::Search;
 use Badger::Filesystem 'File';
 use parent 'XAS::Service::Resource';
@@ -377,6 +378,7 @@ sub post_data {
     my $params = shift;
 
     my $alias = $self->alias;
+    my $info = CPAN::DistnameInfo->new($params->{'source'});
 
     $self->log->debug("$alias: post_data");
 
@@ -394,6 +396,21 @@ sub post_data {
         -destination => $self->processor->authors->path
     );
     
+    my $providers = $self->processor->packages->data(
+        -criteria => { id => $rec->{'id'} }
+    );
+
+    foreach my $provider (@$providers) {
+    
+        $self->processor->permissions->inject(
+            -pauseid => $params->{'pauseid'},
+            -module  => $provider->name,
+            -perms   => 'f',
+            -mirror  => URL($params->{'mirror'})
+        );
+
+    }
+
     return $rec;
     
 }

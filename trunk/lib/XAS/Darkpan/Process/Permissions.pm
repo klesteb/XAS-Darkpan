@@ -122,15 +122,15 @@ sub load {
 sub inject {
     my $self = shift;
     my $p = validate_params(\@_, {
-        -pause_id => 1,
-        -module   => 1,
-        -perms    => { regex => $PERMS },
-        -mirror   => { optional => 1, isa => 'Badger::URL', default => $self->mirror }
+        -pauseid => 1,
+        -module  => 1,
+        -perms   => { regex => $PERMS },
+        -mirror  => { optional => 1, isa => 'Badger::URL', default => $self->mirror }
     });
 
     $self->log->debug('entering inject()');
 
-    my $pauseid = uc($p->{'pause_id'});
+    my $pauseid = uc($p->{'pauseid'});
     my $module  = $p->{'module'};
     my $perms   = $p->{'perms'};
     my $mirror  = $p->{'mirror'}->server;
