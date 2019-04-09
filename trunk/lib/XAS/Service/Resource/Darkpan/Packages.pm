@@ -11,7 +11,6 @@ use Try::Tiny;
 use Data::Dumper;
 use Badger::URL 'URL';
 use XAS::Utils 'dt2db';
-use CPAN::DistnameInfo;
 use XAS::Service::Search;
 use Badger::Filesystem 'File';
 use parent 'XAS::Service::Resource';
@@ -378,10 +377,13 @@ sub post_data {
     my $params = shift;
 
     my $alias = $self->alias;
-    my $info = CPAN::DistnameInfo->new($params->{'source'});
 
     $self->log->debug("$alias: post_data");
 
+    # this most likely should be handed off to a job queue
+    # thingy for processing. processing the archive can
+    # take some time, and may timeout the http connection.
+    
     my $rec = $self->processor->packages->inject(
         -pauseid => $params->{'pauseid'},
         -package => $params->{'package'},
@@ -428,12 +430,18 @@ sub build_response {
         }
     };
 
-    $data->{'id'}       = $rec->id;
-    $data->{'pauseid'}  = $rec->pauseid;
-    $data->{'name'}     = $rec->name;
-    $data->{'email'}    = $rec->email;
-    $data->{'mirror'}   = $rec->mirror;
-    $data->{'datetime'} = dt2db($rec->datetime);
+    $data->{'id'}        = $rec->id;
+    $data->{'pauseid'}   = $rec->pauseid;
+    $data->{'package'}   = $rec->package;
+    $data->{'dist'}      = $rec->dist;
+    $data->{'version'}   = $rec->version;
+    $data->{'maturity'}  = $rec->maturity;
+    $data->{'filename'}  = $rec->filename;
+    $data->{'extension'} = $rec->extension;
+    $data->{'pathname'}  = $rec->pathname;
+    $data->{'mirror'}    = $rec->mirror;
+    $data->{'downloads'} = $rec->downloads;
+    $data->{'datetime'}  = dt2db($rec->datetime);
 
     return $data;
 
