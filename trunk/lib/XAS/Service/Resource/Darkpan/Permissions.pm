@@ -60,7 +60,7 @@ sub malformed_request {
 
             unless ($id eq '_search') {
 
-                if ($self->procesor->permissions->find(-criteria => { id => $id })) {
+                if ($self->processor->permissions->find(-criteria => { id => $id })) {
 
                     $stat = 0;
 
