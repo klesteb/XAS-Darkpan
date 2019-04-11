@@ -106,6 +106,19 @@ sub build_routes {
         ])
     );
 
+    $$urlmap->mount('/api/permissions' => Web::Machine->new(
+        resource => 'XAS::Service::Resource::Darkpan::Permissions',
+        resource_args => [
+            alias           => 'permissions',
+            template        => $template,
+            json            => $json,
+            app_name        => $name,
+            app_description => $description,
+            authenticator   => $authen,
+            processor       => $processor,
+        ])
+    );
+
     $$urlmap->mount('/api' => Web::Machine->new(
         resource => 'XAS::Service::Resource::Darkpan::Root',
         resource_args => [

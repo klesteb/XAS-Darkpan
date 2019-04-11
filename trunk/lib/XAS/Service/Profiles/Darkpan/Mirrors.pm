@@ -69,8 +69,8 @@ XAS::Service::Profiles::Darkpan::Mirrors - A class for creating standard validat
 
 =head1 SYNOPSIS
 
- my $mirrors  = XAS::Service::Profiles::Darkpan::Mirrors->build();
- my $validate = XAS::Service::Profiles->new($mirrors);
+ my $profile  = XAS::Service::Profiles::Darkpan::Mirrors->build();
+ my $validate = XAS::Service::Profiles->new($profile);
 
 =head1 DESCRIPTION
 

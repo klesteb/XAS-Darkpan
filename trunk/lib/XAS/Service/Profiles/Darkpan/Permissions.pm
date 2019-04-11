@@ -1,4 +1,4 @@
-package XAS::Service::Profiles::Darkpan::Authors;
+package XAS::Service::Profiles::Darkpan::Permissions;
 
 our $VERSION = '0.01';
 
@@ -16,27 +16,27 @@ sub build {
 
     my $profile = {
         filters  => ['trim'],
-        required => ['pauseid', 'name', 'email', 'action'],
+        required => ['pauseid', 'module', 'perms', 'action'],
         optional => ['mirror', 'id'],
         defaults => {
             mirror => 'http://www.cpan.org',
         },
         field_filters => {
-            email   => ['lc'],
             action  => ['lc'],
+            perms   => ['lc'],
             pauseid => ['uc']
         },
         dependencies => {
             action => {
-                post => ['pauseid', 'name', 'email', 'mirror'],
-                put  => ['pauseid', 'name', 'email', 'mirror'],
+                post => ['pauseid', 'module', 'perms', 'mirror'],
+                put  => ['pauseid', 'module', 'perms', 'mirror'],
             }
         },
         constraint_methods => {
             id      => qr/\d+/,
             pauseid => qr/^\w+$/,
-            name    => qr/\w+/,
-            email   => valid_email,
+            module  => qr/.*/,
+            perms   => qr/m|f|c/,
             mirror  => valid_url,
             action  => FV_set(1, qw( post put )),
         },
@@ -45,16 +45,16 @@ sub build {
             constraints => {
                 id      => 'should be numeric characters',
                 pauseid => 'should be alphanumeric characters',
-                name    => 'should be alphanumeric characters',
-                email   => 'should be a valid email address',
+                module  => 'should be alphanumeric characters',
+                perms   => 'should be either m, f or c',
                 mirror  => 'should be a valid url',
-                action  => 'must be one of these: post',
+                action  => 'must be one of these: post, put',
             }
         }
     };
 
     my $profiles = {
-        authors => $profile,
+        permissions => $profile,
     };
 
     return $profiles;
@@ -69,11 +69,11 @@ sub build {
 
 =head1 NAME
 
-XAS::Service::Profiles::Darkpan::Authors - A class for creating standard validation profiles.
+XAS::Service::Profiles::Darkpan::Permissions - A class for creating standard validation profiles.
 
 =head1 SYNOPSIS
 
- my $profile  = XAS::Service::Profiles::Darkpan::Authors->build();
+ my $profile  = XAS::Service::Profiles::Darkpan::Permissions->build();
  my $validate = XAS::Service::Profiles->new($profile);
 
 =head1 DESCRIPTION
